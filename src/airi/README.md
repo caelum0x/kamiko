@@ -1,15 +1,16 @@
-# airi capabilities merged into amica
+# airi, merged into amica
 
-Framework-agnostic TypeScript ported from apps/airi (MIT, https://github.com/moeru-ai/airi) so $NPC
-gains airi's capabilities without a Vue→React rewrite. Each is copied in and made self-contained.
+The framework-agnostic TypeScript of apps/airi (MIT, https://github.com/moeru-ai/airi), copied here
+so $NPC gains airi's capabilities on the amica (React) foundation. Each package's `@proj-airi/*`
+imports are repointed at the sibling merged copy; third-party deps are declared in
+apps/vtuber-amica/package.json at airi's catalog versions.
 
-| dir | from airi package | what | verified |
-|---|---|---|---|
-| `../utils/airiQueue.ts` | stream-kit | async processing queue | wired into the game wake pipeline |
-| `motion/` | motion-driver-magic | AR-HMM/VAR procedural VRM motion | model test 3/3 |
-| `gamepad/` | input-gamepad | Standard Gamepad input | tests 5/5 |
-| `dualsense/` | input-playstation-dualsense-5 | DualSense 5 HID input | tests 9/9 |
-| `i18n/` | i18n | locale message catalog (zh/ja/ko/ru/vi/fr/es/…) | data |
-| `plugin-protocol/` | plugin-protocol | the VTuber-control event contract (72 typed events) | loads, 72 descriptors |
+Load-verified under bun: stream-kit (../utils/airiQueue.ts, wired into the game), motion/, gamepad/,
+dualsense/, i18n/, plugin-protocol/ (72 events), server-shared/, live2d/ (tests 11/11), fonts/.
 
-See ../../../../AIRI-MERGE.md for the full strategy and remaining catalog.
+Copied + deps declared, build after `npm install`: plugin-sdk/, plugin-sdk-tamagotchi/, server-sdk/,
+server-runtime/, better-ws/, pipelines-audio/, lipsync/, mediapipe/, ccc/, core-agent/,
+memory-pgvector/.
+
+NOT here (can't be): the Vue UI apps (Vue can't run in React) and pure build/test tooling.
+See ../../../../AIRI-MERGE.md. Build: `cd apps/vtuber-amica && npm install && npm run build`.
