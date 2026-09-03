@@ -1,6 +1,17 @@
 const CopyPlugin = require("copy-webpack-plugin");
 const withPWA = require("@ducanh2912/next-pwa").default({
   dest: "public",
+  /*
+   * The $NPC streak-saver push handlers. next-pwa compiles worker/index.js and imports it into the
+   * service worker it generates, so the push/notificationclick listeners ship INSIDE the same
+   * /sw.js that already does amica's offline caching.
+   *
+   * They cannot simply be a hand-written public/sw.js: `dest: "public"` means the build OVERWRITES
+   * that file, so the worker would work in development and silently disappear in production. And
+   * they cannot be a second worker registered at '/', because registering another script at the
+   * same scope replaces amica's PWA registration outright.
+   */
+  customWorkerSrc: "worker",
 });
 
 const output = process.env.NEXT_OUTPUT || undefined;

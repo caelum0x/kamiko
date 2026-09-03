@@ -505,7 +505,12 @@ class WebmFile extends WebmContainer {
   }
 
   toBlob(type = "video/webm") {
-    return new Blob([this.source!.buffer], { type });
+    // The Uint8Array itself, not its `.buffer`. Two reasons, and the second is a correctness bug:
+    // `.buffer` is typed ArrayBufferLike (it may be a SharedArrayBuffer), which is not a BlobPart;
+    // and it is the WHOLE backing buffer, so a view with a non-zero byteOffset or a shorter length
+    // than its buffer — which is exactly what `subarray`/`slice` on a pooled buffer produces —
+    // would write bytes outside this section into the recording.
+    return new Blob([this.source!], { type });
   }
 }
 

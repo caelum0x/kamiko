@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
-import Link from "next/link";
+import { useRouter } from "next/router";
 import { Menu, Transition } from '@headlessui/react'
 import { clsx } from "clsx";
 import { M_PLUS_2, Montserrat } from "next/font/google";
@@ -28,6 +28,9 @@ import {
   WrenchScrewdriverIcon,
   SignalIcon,
   AcademicCapIcon,
+  CursorArrowRaysIcon,
+  CurrencyDollarIcon,
+  ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 import { IconBrain } from '@tabler/icons-react';
 
@@ -114,6 +117,7 @@ function detectVRHeadset() {
 
 
 export default function Home() {
+  const router = useRouter();
   const { t, i18n } = useTranslation();
   const currLang = i18n.resolvedLanguage;
   const { viewer } = useContext(ViewerContext);
@@ -451,6 +455,37 @@ export default function Home() {
               icon={CloudArrowDownIcon}
               href="/import"
               label="import"
+            />
+
+            {/*
+              THE $NPC FUNNEL, REACHABLE FROM THE FRONT DOOR.
+              `/` is the URL a visitor actually lands on, and until these three existed the clicker
+              (retention), the holder dashboard (tips and perks — the revenue surface) and the trust
+              page were direct-link-only orphans: /game and /holder linked back here, nothing linked
+              forward. The trust page was the one that cost us — somebody who lands on `/` and wants
+              to check the mint before buying had no path to the page that answers that.
+
+              `router.push` rather than MenuButton's `href`, which is `window.open(href, target)`:
+              window.open takes a raw URL and does NOT apply next.config.js's `basePath`, so on a
+              BASE_PATH deployment every one of these would open a 404. The router applies it.
+            */}
+            <MenuButton
+              large={isVRHeadset}
+              icon={CursorArrowRaysIcon}
+              onClick={() => router.push("/game")}
+              label="tap to wake her"
+            />
+            <MenuButton
+              large={isVRHeadset}
+              icon={CurrencyDollarIcon}
+              onClick={() => router.push("/holder")}
+              label="holder dashboard"
+            />
+            <MenuButton
+              large={isVRHeadset}
+              icon={ShieldCheckIcon}
+              onClick={() => router.push("/trust")}
+              label="trust / verify the mint"
             />
 
             { showSubconciousText ? (

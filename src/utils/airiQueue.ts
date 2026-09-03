@@ -59,8 +59,19 @@ export function createQueue<T>(options: {
     if (!drainTask) drainTask = drain();
   }
 
-  function clear() {
-    queue.length = 0;
+  /**
+   * Empty the queue and HAND BACK what was still in it.
+   *
+   * LOCAL DIVERGENCE FROM UPSTREAM airi (upstream's `clear()` returns void). It is additive — every
+   * existing caller ignores the value — and it is here because the caller that matters cannot do its
+   * job without it: game.tsx clears this queue when the page unmounts, and the taps it drops were
+   * already subtracted from that page's `pending` counter. Upstream's `clear()` emits no event, and
+   * the `error` event that DOES restore a batch only fires from `drain`'s catch, which a cleared
+   * item never reaches — so the taps were silently lost while the comment above the call claimed
+   * they were put back. Returning them is what makes that claim true.
+   */
+  function clear(): T[] {
+    return queue.splice(0, queue.length);
   }
 
   async function drain() {

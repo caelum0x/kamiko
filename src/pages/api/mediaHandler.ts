@@ -1,10 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 
 import { TimestampedPrompt } from '@/features/amicaLife/eventHandler';
-import { config as configs } from '@/utils/config';
 import { apiLogs } from './amicaHandler';
 
 import { handleConfig } from '@/features/externalAPI/externalAPI';
+import { admitExternalApi, refuseExternalApi } from '@/features/externalAPI/gate';
 import { ApiResponse, generateSessionId, sendError } from '@/features/externalAPI/utils/apiHelper';
 import { transcribeVoice } from '@/features/externalAPI/processors/voiceProcessor';
 import { processImage } from '@/features/externalAPI/processors/imageProcessor';
@@ -19,14 +19,23 @@ export const config = {
   },
 };
 
-// Main API handler
+/**
+ * The dev-only external API's voice/image intake.
+ *
+ * Gated by the same `admitExternalApi` the other two routes use, for the same reasons (see
+ * features/externalAPI/gate.ts) plus one specific to this file: `bodyParser` is DISABLED here and
+ * the multipart branch hands the raw request to formidable, which spools uploads to a temp file.
+ * The old order — `handleConfig("fetch")` first, then a `config()` check that could be satisfied by
+ * a file a stranger had written — meant an unauthenticated caller could make this process perform
+ * an outbound fetch and then a disk-backed upload. The gate now runs before either, so a refused
+ * caller costs a status line and nothing on disk.
+ */
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
+  const admission = admitExternalApi(req.headers);
+  if (refuseExternalApi(res, admission)) return;
+
   // Syncing config to be accessible from server side
   await handleConfig("fetch");
-
-  if (configs('external_api_enabled') !== 'true') {
-    return sendError(res, '', 'API is currently disabled.', 503);
-  }
 
   const currentSessionId = generateSessionId();
   const timestamp = new Date().toISOString();

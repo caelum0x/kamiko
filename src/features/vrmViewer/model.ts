@@ -11,7 +11,13 @@ import { VRMAnimation } from "@/lib/VRMAnimation/VRMAnimation";
 import { VRMLookAtSmootherLoaderPlugin } from "@/lib/VRMLookAtSmootherLoaderPlugin/VRMLookAtSmootherLoaderPlugin";
 import { LipSync } from "@/features/lipSync/lipSync";
 import { EmoteController } from "@/features/emoteController/emoteController";
-import { ProceduralAnimation } from "@/features/proceduralAnimation/proceduralAnimation";
+/*
+ * The idle animation is airi's statistical motion model (merged into src/airi/motion), not the
+ * single-tone sine loop it replaced — see statisticalIdle.ts. It keeps the same constructor and the
+ * same update(delta) contract, so this is a drop-in; it falls back to the authored idle by itself if
+ * the model cannot be fitted, and never throws inside the render loop.
+ */
+import { StatisticalIdleAnimation } from "@/features/proceduralAnimation/statisticalIdle";
 import { Screenplay } from "@/features/chat/messages";
 import { downscaleModelTextures, logTextureInfo } from '@/utils/textureDownscaler';
 import { OptimizedGLTFLoader } from '@/utils/gltfOptimizer';
@@ -26,7 +32,7 @@ export class Model {
   public vrm?: VRM | null;
   public mixer?: THREE.AnimationMixer;
   public emoteController?: EmoteController;
-  public proceduralAnimation?: ProceduralAnimation;
+  public proceduralAnimation?: StatisticalIdleAnimation;
 
   private _lookAtTargetParent: THREE.Object3D;
   public _lipSync?: LipSync;
@@ -220,7 +226,7 @@ export class Model {
             this._lookAtTargetParent,
           );
 
-          this.proceduralAnimation = new ProceduralAnimation(vrm);
+          this.proceduralAnimation = new StatisticalIdleAnimation(vrm);
 
           resolve();
         },

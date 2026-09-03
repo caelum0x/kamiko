@@ -12,10 +12,11 @@
  * React escapes text by default; the only hand-guard kept is `safeUrl`, so a javascript: URL from a
  * compromised API can never become a link.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 
-const API = (process.env.NEXT_PUBLIC_NPC_API || '').replace(/\/+$/, '');
+import { API, apiDeadline, throttleRetryMs } from '../npc/config.ts';
+
 const TRUST_SCHEMA = 'npc.trust-report';
 
 const safeUrl = (u: unknown): string | null => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null);
@@ -38,25 +39,65 @@ function classifyTrust(status: number, body: any): Outcome {
 export default function TrustPage() {
   const [report, setReport] = useState<any>(null);
   const [unverified, setUnverified] = useState<string | null>('checking on-chain…');
-  const [loading, setLoading] = useState(false);
+  /** Why the report on screen may not be current. '' when the last read was a real answer. */
+  const [throttleNote, setThrottleNote] = useState('');
+  /*
+   * Both of these are refs, not state, and both were bugs as state.
+   *
+   * `loading` guarded re-entrancy, but the 120 s interval below is installed once with a `load`
+   * captured on the first render — where `loading` is permanently false — so the guard could never
+   * fire for the poll it was written for. A ref is read at call time, which is what a re-entrancy
+   * guard has to be.
+   *
+   * `backoffUntil` is the brake a 429 sets, copied from game.tsx's shared brake for the same reason
+   * it exists there: the client and the game page share one rate-limit bucket per address, so
+   * answering a throttle by polling again on the normal schedule spends the budget on the request
+   * that was already refused.
+   */
+  const loading = useRef(false);
+  const backoffUntil = useRef(0);
 
   const load = useCallback(async () => {
-    if (loading || !API) { if (!API) setUnverified('no verifier configured (NEXT_PUBLIC_NPC_API unset)'); return; }
-    setLoading(true);
+    if (!API) { setUnverified('no verifier configured (NEXT_PUBLIC_NPC_API unset)'); return; }
+    if (loading.current || Date.now() < backoffUntil.current) return;
+    loading.current = true;
     try {
-      const res = await fetch(API + '/trust', { headers: { accept: 'application/json' } });
+      const res = await fetch(API + '/trust', { headers: { accept: 'application/json' }, signal: apiDeadline() });
+      /*
+       * A THROTTLE IS NOT A VERDICT — the same rule game.tsx already documents having fixed on its
+       * own /trust poll ("the funnel disowning its own mint because it polled too fast", game.tsx's
+       * contract-CTA comment). GET /trust is rate-limited at burst 60 / 30 per minute and a 429 is
+       * JSON, so the previous code parsed it happily, found `schema !== 'npc.trust-report'`, and
+       * printed the grey UNVERIFIED card with "assume unverified, and check the mint yourself" —
+       * about a token OUR OWN verifier had just passed. On a throttle we change nothing on screen,
+       * note why, and stop asking until the server said we may.
+       *
+       * This page does its own fetch rather than going through `readJson` because a report the
+       * verifier could not build arrives as a real body with HTTP 503 (services/game-api/trust.ts:
+       * "A report we could not build is a 503, not a 200 with a sad payload"), and the
+       * `unavailable.detail` in it is the most useful sentence on the page. `throttleRetryMs` is the
+       * one piece of readJson this needs, so it is shared rather than copied.
+       */
+      const wait = await throttleRetryMs(res);
+      if (wait !== null) {
+        backoffUntil.current = Math.max(backoffUntil.current, Date.now() + wait);
+        setThrottleNote(`the verifier is rate-limiting this page — this report is not being re-checked for about ${Math.round(wait / 1000)}s. nothing below has changed.`);
+        return;
+      }
       let body: any = null;
       try { body = await res.json(); } catch { body = null; }
       const out = classifyTrust(res.status, body);
+      setThrottleNote('');
       if (out.ok) { setReport(out.report); setUnverified(null); }
       else { setReport(null); setUnverified(out.reason); }
     } catch (e: any) {
+      setThrottleNote('');
       setReport(null);
       setUnverified(`could not reach the verifier at ${API} (${e?.message || 'network error'})`);
-    } finally { setLoading(false); }
-  }, [loading]);
+    } finally { loading.current = false; }
+  }, []);
 
-  useEffect(() => { load(); const id = setInterval(load, 120000); return () => clearInterval(id); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { load(); const id = setInterval(load, 120000); return () => clearInterval(id); }, [load]);
 
   const s = report?.score;
   const verdict = ['pass', 'warn', 'fail'].includes(report?.verdict) ? report.verdict : 'unknown';
@@ -77,6 +118,8 @@ export default function TrustPage() {
           <div className="npct-logo">$<b>NPC</b> <span>/ trust</span></div>
           <a href="/game" className="npct-back">← game</a>
         </header>
+
+        {throttleNote ? <div className="npct-throttle">{throttleNote}</div> : null}
 
         {unverified ? (
           <div className="npct-card">
@@ -170,5 +213,6 @@ const CSS = `
 .npct-warn{color:#ffb020;font-size:11px}
 .npct-metrics{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
 .npct-metric{border:1px solid #1c1c2e;border-radius:8px;padding:8px;text-align:center;font-size:13px;font-weight:700}
+.npct-throttle{border:1px solid #3a3a1c;background:#171708;border-radius:12px;padding:10px 12px;margin-top:12px;font-size:11px;line-height:1.5;color:#ffb020}
 .npct-fine{margin-top:20px;border:1px solid #1c1c2e;border-radius:12px;padding:12px;font-size:11px;line-height:1.6;color:#7a7a92}
 `;

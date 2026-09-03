@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 import { updateConfig, defaultConfig } from '@/utils/config';
 import { isTauri } from '@/utils/isTauri';
 import VrmDemo from "@/components/vrmDemo";
-import { supabase } from '@/utils/supabase';
+import { getSupabase } from '@/utils/supabase';
 import { vrmDataProvider } from '@/features/vrmStore/vrmDataProvider';
 import { BlobToBase64 } from '@/utils/blobDataUtils';
 
@@ -36,6 +36,13 @@ export default function Import() {
 
   useEffect(() => {
     async function getCharacter() {
+      // null whenever this deployment has no character-sharing backend configured. The page's own
+      // error state already means "this share link cannot be opened here", which is exactly true.
+      const supabase = getSupabase();
+      if (!supabase) {
+        setError(true);
+        return;
+      }
       const { data, error } = await supabase
         .from('characters')
         .select(`description, name, system_prompt, vision_system_prompt, bg_url, youtube_videoid, vrm_url, animation_url, voice_url`)

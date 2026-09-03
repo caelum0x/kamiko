@@ -1,47 +1,68 @@
 import { config, defaults, prefixed } from "@/utils/config";
 import isDev from "@/utils/isDev";
+import { externalApiAuthHeaders } from "./token";
 import {
   MAX_STORAGE_TOKENS,
   TimestampedPrompt,
 } from "../amicaLife/eventHandler";
 import { Message } from "../chat/messages";
 
-export const configUrl = new URL(
-  `${process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL}/api/dataHandler`,
-);
-configUrl.searchParams.append("type", "config");
+/**
+ * The dev-only external API's endpoint URLs.
+ *
+ * These were five `new URL(\`${process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL}/api/dataHandler\`)`
+ * calls at MODULE SCOPE. That variable is unset in every deployment that does not run the dev
+ * external-API feature (it is gated behind `isDev` and `external_api_enabled` at every call site),
+ * so the template produced the literal string "undefined/api/dataHandler" and the URL constructor
+ * threw `TypeError: Invalid URL` the moment the module was imported — during `next build`'s page
+ * data collection, failing the whole build for a feature the build is not even enabling.
+ *
+ * They are built lazily now, and `null` when there is no base URL to build them from. Null is the
+ * honest value: without a base URL there is no endpoint, and the callers already return early in
+ * exactly that situation.
+ */
+function endpoint(type: string): URL | null {
+  const base = (process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL || '').trim();
+  if (!base) return null;
+  let url: URL;
+  try {
+    url = new URL(`${base.replace(/\/+$/, '')}/api/dataHandler`);
+  } catch {
+    // A malformed base is the same as an absent one: the feature is off, and it must not take the
+    // importing module down with it.
+    return null;
+  }
+  url.searchParams.append('type', type);
+  return url;
+}
 
-export const userInputUrl = new URL(
-  `${process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL}/api/dataHandler`,
-);
-userInputUrl.searchParams.append("type", "userInputMessages");
-
-export const subconsciousUrl = new URL(
-  `${process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL}/api/dataHandler`,
-);
-subconsciousUrl.searchParams.append("type", "subconscious");
-
-export const logsUrl = new URL(
-  `${process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL}/api/dataHandler`,
-);
-logsUrl.searchParams.append("type", "logs");
-
-export const chatLogsUrl = new URL(
-  `${process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL}/api/dataHandler`,
-);
-chatLogsUrl.searchParams.append("type", "chatLogs");
+export const configUrl: URL | null = endpoint('config');
+export const userInputUrl: URL | null = endpoint('userInputMessages');
+export const subconsciousUrl: URL | null = endpoint('subconscious');
+export const logsUrl: URL | null = endpoint('logs');
+export const chatLogsUrl: URL | null = endpoint('chatLogs');
 
 // Cached server config
 export let serverConfig: Record<string, string> = {};
 
-export async function fetcher(method: string, url: URL, data?: any) {
+/*
+ * Every call below carries `externalApiAuthHeaders()` (features/externalAPI/token.ts).
+ * `/api/dataHandler` used to answer anyone; it now requires the dev-loopback token, and amica's own
+ * page is one of its callers — so the token travels on the app's own requests too. When none is
+ * configured the helper returns `{}` and the server answers 404, which is the correct outcome: the
+ * feature is off.
+ */
+export async function fetcher(method: string, url: URL | null, data?: any) {
+  // No base URL configured ⇒ no endpoint ⇒ nothing to call. Callers are already gated on `isDev`;
+  // this is the second gate, so a misconfigured dev environment is inert rather than throwing.
+  if (!url) return;
   let response: any;
   switch (method) {
     case "POST":
       try {
         response = await fetch(url, {
           method: method,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...externalApiAuthHeaders() },
           body: JSON.stringify(data),
         });
       } catch (error) {
@@ -51,7 +72,7 @@ export async function fetcher(method: string, url: URL, data?: any) {
 
     case "GET":
       try {
-        response = await fetch(url);
+        response = await fetch(url, { headers: externalApiAuthHeaders() });
         if (response.ok) {
           serverConfig = await response.json();
         }
@@ -111,13 +132,15 @@ export async function handleConfig(
 }
 
 export async function handleUserInput(message: string) {
-  if (!isDev || config("external_api_enabled") !== "true") {
+  // The third condition is the endpoint itself: with no NEXT_PUBLIC_DEVELOPMENT_BASE_URL there is
+  // no URL to post to, and the feature is off no matter what the config flag says.
+  if (!isDev || config("external_api_enabled") !== "true" || !userInputUrl) {
     return;
   }
 
   fetch(userInputUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...externalApiAuthHeaders() },
     body: JSON.stringify({
       systemPrompt: config("system_prompt"),
       message: message,
@@ -126,13 +149,13 @@ export async function handleUserInput(message: string) {
 }
 
 export async function handleChatLogs(messages: Message[]) {
-  if (!isDev || config("external_api_enabled") !== "true") {
+  if (!isDev || config("external_api_enabled") !== "true" || !chatLogsUrl) {
     return;
   }
 
   fetch(chatLogsUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...externalApiAuthHeaders() },
     body: JSON.stringify(messages),
   });
 }
@@ -140,11 +163,11 @@ export async function handleChatLogs(messages: Message[]) {
 export async function handleSubconscious(
   timestampedPrompt: TimestampedPrompt,
 ): Promise<any> {
-  if (!isDev || config("external_api_enabled") !== "true") {
+  if (!isDev || config("external_api_enabled") !== "true" || !subconsciousUrl) {
     return;
   }
 
-  const data = await fetch(subconsciousUrl);
+  const data = await fetch(subconsciousUrl, { headers: externalApiAuthHeaders() });
   if (!data.ok) {
     throw new Error("Failed to get subconscious data");
   }
@@ -165,6 +188,7 @@ export async function handleSubconscious(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...externalApiAuthHeaders(),
     },
     body: JSON.stringify({ subconscious: currentStoredSubconscious }),
   });

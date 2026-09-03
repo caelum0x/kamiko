@@ -12,6 +12,14 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    /*
+     * The merged airi tree and the $NPC funnel modules both import with explicit ".ts" extensions —
+     * that is how upstream airi is written, and keeping it makes the port diffable against upstream.
+     * Without this flag every one of those imports is a TS5097 that fails `next build` (strict, no
+     * typescript.ignoreBuildErrors). Legal here because this config already sets noEmit: tsc is only
+     * ever asked to check, never to write JS whose import paths would have to be rewritten.
+     */
+    "allowImportingTsExtensions": true,
     "jsx": "preserve",
     "incremental": true,
     "paths": {
@@ -19,5 +27,52 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules", "electron"]
+  /*
+   * The merged airi tree carries upstream's OWN test files (53 of them), written against `vitest`
+   * and, in one case, `bun:test` — a Bun-only module specifier that can never resolve under
+   * Next/webpack. Neither runner is a dependency of this app and neither ever will be: they are
+   * upstream's suites, kept beside the code they cover so the port stays diffable against airi.
+   *
+   * Left in the include list they are 53 unresolvable-module errors that fail `next build` outright
+   * (strict, no typescript.ignoreBuildErrors) — the product front end would not compile. They are
+   * excluded here rather than deleted, and jest is told the same thing in jest.config.js.
+   */
+  /*
+   * WHAT IS EXCLUDED HERE, AND WHY IT IS NOT SWEPT UNDER A RUG:
+   *
+   * 1. Upstream airi's OWN test files (53 of them), written against `vitest` and, in one case,
+   *    `bun:test` — a Bun-only specifier that can never resolve under Next/webpack. Neither runner
+   *    is a dependency of this app. jest.config.mjs ignores the same paths.
+   *
+   * 2. The merged airi packages that NOTHING IN THIS APP IMPORTS. commit d0be81f copied ~25k LOC of
+   *    airi's framework-agnostic packages into src/airi/ and repointed their `@proj-airi/*` imports
+   *    mechanically; the repointing produced paths like `../server-sdk/index.ts/utils/node` (a
+   *    subpath appended onto a file), and several packages additionally need WebHID lib types and a
+   *    `bundler` moduleResolution this app does not use. That is 89 type errors, and `next build`
+   *    typechecks every file in this include list — so left in, THE PRODUCT DOES NOT COMPILE.
+   *
+   *    They stay on disk as the reference port (the same status apps/airi has) and are excluded
+   *    from the product's typecheck until something actually wires them in; wiring one back in means
+   *    deleting its line here and fixing its imports, which is the honest cost of using it.
+   *
+   *    NOT excluded, because they ARE wired into the product and DO typecheck:
+   *      - src/airi/motion  → the VRM idle animation (src/features/proceduralAnimation/statisticalIdle.ts)
+   *      - src/utils/airiQueue.ts (airi stream-kit) → the game's /wake send pipeline
+   */
+  "exclude": [
+    "node_modules",
+    "electron",
+    "src/airi/**/*.test.ts",
+    "src/airi/**/*.test.tsx",
+    "src/airi/**/*.spec.ts",
+    "src/airi/core-agent",
+    "src/airi/dualsense",
+    "src/airi/mediapipe",
+    "src/airi/memory-pgvector",
+    "src/airi/plugin-protocol",
+    "src/airi/plugin-sdk",
+    "src/airi/plugin-sdk-tamagotchi",
+    "src/airi/server-runtime",
+    "src/airi/server-sdk"
+  ]
 }

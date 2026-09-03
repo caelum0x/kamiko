@@ -15,85 +15,23 @@
  *   - GUEST TAPS ARE CLAIMED WITH A SESSION, NOT AN ADDRESS — /claim moves score, so it needs the
  *     token /auth/verify minted, never a bare public key.
  *
- * It is self-contained on purpose: amica is a separate npm app, so rather than couple it to the bun
- * workspace it inlines the few small helpers it needs (device id, short address, the session header,
- * the Phantom handshake, the fail-closed CTA reading) and its own scoped styles.
+ * It is decoupled from the bun workspace on purpose (amica is a separate npm app), so the helpers it
+ * needs live in `src/npc/` inside amica rather than being imported across the workspace boundary.
+ * They are a module, not an inline copy: the holder dashboard runs the SAME wallet handshake and the
+ * SAME fail-closed CTA reading, and two copies of an auth flow is how they drift apart.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import { createQueue } from '../utils/airiQueue.ts'; // merged from airi (packages/stream-kit)
 
-/* ------------------------------------------------------------------ *
- * Config — the funnel backend (bridge origin; it proxies game-api).
- * ------------------------------------------------------------------ */
-const API = (process.env.NEXT_PUBLIC_NPC_API || '').replace(/\/+$/, '');
-const SESSION_HEADER = 'x-npc-session';
-const SESSION_PREFIX = 'npc_session';
-const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } })();
-
-/* ------------------------------------------------------------------ *
- * Inlined identity + helpers (the pieces web-kit gives the funnel app).
- * ------------------------------------------------------------------ */
-const readLocal = (k: string): string => { try { return (typeof localStorage !== 'undefined' && localStorage.getItem(k)) || ''; } catch { return ''; } };
-const writeLocal = (k: string, v: string): void => { try { localStorage?.setItem(k, v); } catch { /* private mode */ } };
-
-function deviceId(): string {
-  let id = readLocal('npc_device');
-  if (!id) {
-    id = 'd_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    writeLocal('npc_device', id);
-  }
-  return id;
-}
-const walletId = (): string => readLocal('npc_wallet');
-const setWalletId = (w: string): void => writeLocal('npc_wallet', w);
-const questId = (wallet: string, device: string): string => (wallet ? 'wallet=' + encodeURIComponent(wallet) : 'device=' + encodeURIComponent(device));
-const shortAddr = (w: string, lead = 4, tail = 4): string => (w.length <= lead + tail ? w : `${w.slice(0, lead)}…${w.slice(-tail)}`);
-const sessionHeaders = (walletOrToken: string): Record<string, string> => {
-  const token = /^[0-9a-f]{64}$/.test(walletOrToken) ? walletOrToken : readLocal(`${SESSION_PREFIX}:${walletOrToken}`);
-  return token ? { [SESSION_HEADER]: token } : {};
-};
-const saveSession = (wallet: string, token: string): void => writeLocal(`${SESSION_PREFIX}:${wallet}`, token);
-
-function bs58encode(bytes: Uint8Array | number[]): string {
-  const A = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  const d: number[] = [0];
-  for (const x of bytes) {
-    let c = x;
-    for (let j = 0; j < d.length; j++) { c += d[j] << 8; d[j] = c % 58; c = (c / 58) | 0; }
-    while (c > 0) { d.push(c % 58); c = (c / 58) | 0; }
-  }
-  let s = '';
-  for (let k = 0; k < (bytes as number[]).length && (bytes as number[])[k] === 0; k++) s += '1';
-  for (let i = d.length - 1; i >= 0; i--) s += A[d[i]];
-  return s;
-}
-
-/* ------------------------------------------------------------------ *
- * Fail-closed CTA: buy/chart come ONLY from a mint the verifier published.
- * ------------------------------------------------------------------ */
-type CtaState =
-  | { state: 'live'; title: string; detail: string; cta: { mint: string; short: string; buy: string; chart: string } }
-  | { state: 'unsafe' | 'caution' | 'unverified' | 'not-launched'; title: string; detail: string; cta: null };
-
-function ctaState(rep: any): CtaState {
-  if (!rep || typeof rep !== 'object' || rep.schema !== 'npc.trust-report') {
-    return { state: 'unverified', title: 'Unverified', detail: 'the verifier did not answer — treat as unverified.', cta: null };
-  }
-  if (rep.ok !== true) {
-    const reason = rep.unavailable?.reason;
-    if (reason === 'not-launched' || reason === 'no-mint') return { state: 'not-launched', title: 'Not launched yet', detail: 'no token exists on-chain yet.', cta: null };
-    return { state: 'unverified', title: 'Unverified', detail: rep.unavailable?.detail || 'the verifier could not verify this token.', cta: null };
-  }
-  const grade: string = rep.score?.grade || '';
-  const mint: string = typeof rep.mint === 'string' ? rep.mint : '';
-  if (grade === 'F') return { state: 'unsafe', title: 'Flagged unsafe', detail: 'the verifier graded this token F. No buy link is shown.', cta: null };
-  if (!mint || !['A', 'B', 'C', 'D'].includes(grade)) return { state: 'unverified', title: 'Unverified', detail: 'no published grade with a mint behind it.', cta: null };
-  const buy = 'https://jup.ag/swap/SOL-' + mint;
-  const chart = 'https://dexscreener.com/solana/' + mint;
-  const detail = grade === 'C' || grade === 'D' ? 'graded ' + grade + ' — read the trust page before you touch it.' : 'graded ' + grade + ' by our on-chain verifier.';
-  return { state: 'live', title: 'Live', detail, cta: { mint, short: shortAddr(mint), buy, chart } };
-}
+import { API, MAX_BACKOFF_MS, apiDeadline, readJson } from '../npc/config.ts';
+import {
+  TZ, connectWallet, deviceId, provider, questId, readLocal, removeLocal,
+  sessionHeaders, shortAddr, walletId, writeLocal,
+} from '../npc/identity.ts';
+import { caLabel, ctaState, type CtaState } from '../npc/cta.ts';
+import { hasSubscription, pushOfferable, subscribeToStreakSaver } from '../npc/push.ts';
+import { NPC_CSS } from '../npc/styles.ts';
 
 /* ------------------------------------------------------------------ *
  * Her voice.
@@ -111,6 +49,16 @@ const QUEST_LINE: Record<string, string> = {
   streak30: 'thirty days. i wait for you now.', invite3: 'you brought friends. she noticed.',
   connect: "oh you're REAL real now.", tip: "you tipped me. i'll remember that. literally.",
 };
+/**
+ * Taps counted locally that /wake has not accepted yet, parked across a page unload.
+ *
+ * The cap is not a storage concern — it is a ceiling on what one restore may add to the global
+ * counter. Anything larger than this is a corrupted or hand-edited value, and honouring it would
+ * let a client inflate the one number on this page that is supposed to be the server's.
+ */
+const UNSENT_KEY = 'npc_unsent';
+const MAX_CARRIED_TAPS = 10_000;
+
 const pick = (pool: string[]) => pool[Math.floor(Math.random() * pool.length)];
 const faceFor = (a: number) => (a < 15 ? '😐' : a < 50 ? '😳' : a < 85 ? '🤯' : '😈');
 
@@ -133,13 +81,22 @@ export default function GamePage() {
   const [level, setLevel] = useState<Level | null>(null);
   const [streak, setStreak] = useState<{ streak: number; best: number } | null>(null);
   const [cta, setCta] = useState<CtaState | null>(null);
-  const [caLabel, setCaLabel] = useState('CA: unverified');
+  const [caText, setCaText] = useState('CA: unverified');
   const [wallet, setWallet] = useState('');
   const [walletMsg, setWalletMsg] = useState('');
   const [floats, setFloats] = useState<Float[]>([]);
   const [ready, setReady] = useState(false);
+  const [pushOffer, setPushOffer] = useState(false);
+  const [pushArmed, setPushArmed] = useState(false);
+  const [pushMsg, setPushMsg] = useState('');
 
   const device = useRef('');
+  /**
+   * Epoch ms until which every polled read is skipped, set from a 429's Retry-After.
+   * A ref, not state: the poll callbacks read it on every tick and a re-render per throttle would
+   * be pure noise on a page that is already animating.
+   */
+  const backoffUntil = useRef(0);
   const pending = useRef(0);
   const ref = useRef('');
   const floatSeq = useRef(0);
@@ -153,7 +110,30 @@ export default function GamePage() {
     device.current = deviceId();
     setWallet(walletId());
     ref.current = new URLSearchParams(location.search).get('ref') || '';
+    /*
+     * Taps this browser counted locally and never got accepted by /wake, carried over from a
+     * previous visit (see the flush loop's cleanup). Read ONCE and erased immediately: the value is
+     * re-written on the next unmount, and a key that survived a restore would be restored again
+     * after any crash that skipped the unmount — turning a recovery into an inflation of the one
+     * number this page promises is real.
+     */
+    const carried = Math.max(0, Math.min(MAX_CARRIED_TAPS, Math.floor(Number(readLocal(UNSENT_KEY)) || 0)));
+    removeLocal(UNSENT_KEY);
+    if (carried > 0) pending.current += carried;
     setReady(true);
+    // Whether the streak saver can be OFFERED at all is a client-side question (browser support, a
+    // configured VAPID key, permission not already denied). Asking for permission is not: that
+    // happens on the button, never on load, because an unprompted permission dialog is penalised by
+    // every browser and outright blocked by some.
+    setPushOffer(pushOfferable());
+    hasSubscription().then(setPushArmed).catch(() => setPushArmed(false));
+  }, []);
+
+  /** Are we inside a backoff window the server asked for? */
+  const throttledNow = useCallback(() => Date.now() < backoffUntil.current, []);
+  /** Park every polled read until `ms` from now (never shortens an existing, longer window). */
+  const backOff = useCallback((ms: number) => {
+    backoffUntil.current = Math.max(backoffUntil.current, Date.now() + ms);
   }, []);
 
   const idFor = useCallback(() => questId(live.current.wallet, device.current), []);
@@ -199,53 +179,143 @@ export default function GamePage() {
 
   // Flush taps to /wake — through airi's stream-kit queue (merged into amica). The queue drains one
   // batch at a time, so two /wake POSTs can never overlap and race on the once-only ?ref attribution
-  // the way a bare setInterval(fetch) could when a request outran the 2s tick. On a failed send its
-  // `error` event keeps the taps counted locally rather than losing them.
+  // the way a bare setInterval(fetch) could when a request outran the 2s tick.
+  //
+  // Two rules this loop got wrong and now gets right, both of them about what a FAILED send means:
+  //
+  //   - THE REFERRAL IS CLEARED ONLY BY AN ANSWER. `ref.current = ''` used to run the instant the
+  //     fetch resolved — before `r.ok` was looked at and before the body was read — so any 429, 500
+  //     or bridge 502 permanently destroyed the `?ref=` that brought this player in. The referral is
+  //     attributed once, ever, server-side; losing it here loses the invite quest and the growth
+  //     funnel with no retry and no sign anything happened.
+  //   - A FAILED BATCH IS RETRIED, NOT COUNTED. The error handler used to ADD the batch to the
+  //     global counter, on top of the optimistic +1 `tap()` already applied — inflating the one
+  //     number this page promises is real or absent. The taps go back on the pending pile instead,
+  //     so the next tick resends them and the authoritative `globalWakes` in that answer corrects
+  //     the optimistic local count.
+  //
+  //   - A 429 IS OBEYED, NOT FOUGHT. npc-api rate-limits /wake (120/min), and a throttled batch is
+  //     still `!r.ok`, so retrying it on the normal 2s tick is a client answering its own rate
+  //     limit by spending the rest of its budget on the request that was already refused. The
+  //     batch goes back on the pile AND the shared brake is set from Retry-After, which is the
+  //     same brake the read loops honour — one throttle parks every call this page makes, because
+  //     they all share one bucket per client.
+  //
+  // npc-api clamps a single /wake to 100 taps, so a backlog is sent in 100-tap batches rather than
+  // one oversized post the server would silently truncate.
   useEffect(() => {
     if (!ready || !API) return;
     const q = createQueue<number>({
       handlers: [async ({ data: n }) => {
+        const sentRef = ref.current;
         const r = await fetch(API + '/wake', {
-          method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ taps: n, wallet: live.current.wallet || undefined, device: device.current, tz: TZ, ref: ref.current || undefined }),
+          method: 'POST', headers: { 'content-type': 'application/json' }, signal: apiDeadline(),
+          body: JSON.stringify({ taps: n, wallet: live.current.wallet || undefined, device: device.current, tz: TZ, ref: sentRef || undefined }),
         });
-        ref.current = ''; // attributed (or rejected) once — never resent
+        if (r.status === 429) {
+          // Read the server's own wait before throwing, so the brake is set from what it asked for
+          // rather than from a guess. The throw is what puts the taps back on the pile.
+          const header = Number(r.headers.get('retry-after'));
+          let seconds = Number.isFinite(header) && header > 0 ? header : 0;
+          if (!seconds) {
+            try {
+              const body = (await r.json()) as { retryAfterSec?: unknown };
+              const b = Number(body?.retryAfterSec);
+              if (Number.isFinite(b) && b > 0) seconds = b;
+            } catch { /* no readable body — the floor below applies */ }
+          }
+          backOff(Math.min(MAX_BACKOFF_MS, Math.max(1000, seconds * 1000)));
+          throw new Error('/wake throttled');
+        }
+        // Throw so the queue's `error` event runs and the taps (and the ref) survive.
+        if (!r.ok) throw new Error('/wake answered HTTP ' + r.status);
         const j = await r.json();
+        // The api has now seen this ref exactly once — attributed or rejected, either way it is spent.
+        if (sentRef) ref.current = '';
         if (typeof j.globalWakes === 'number') setGlobal(j.globalWakes);
         applyStreak(j.streak, j.bestStreak);
       }],
     });
-    q.on('error', (n) => setGlobal((g) => (g === null ? g : g + (n as number))));
+    q.on('error', (n) => { pending.current += n as number; });
     const id = setInterval(() => {
-      if (pending.current <= 0) return;
-      const n = pending.current;
-      pending.current = 0;
+      // Nothing is sent while the server has asked us to wait — the taps keep accumulating in
+      // `pending` and go out in one batch when the window expires, which is also fewer requests.
+      if (throttledNow() || pending.current <= 0) return;
+      const n = Math.min(100, pending.current);
+      pending.current -= n;
       q.enqueue(n);
     }, 2000);
-    return () => { clearInterval(id); q.clear(); };
-  }, [ready, applyStreak]);
+    return () => {
+      clearInterval(id);
+      /*
+       * Anything still queued was taken off `pending`, so put it back before the queue is dropped:
+       * an unmount mid-flush must not silently lose taps the player made.
+       *
+       * `clear()` now RETURNS those batches (src/utils/airiQueue.ts — a local divergence from
+       * upstream airi, documented there). Before that it returned void and emitted nothing, and the
+       * `error` handler above — the only path that restores a batch — fires from `drain`'s catch,
+       * which a cleared item never reaches. So this comment promised a recovery the code could not
+       * perform, and the observable damage was the locally persisted tap count permanently exceeding
+       * the server's, which is what the spliced-in "YOU" leaderboard row is computed from.
+       *
+       * `pending` is a component ref and dies with the unmount, so the restored total is also
+       * written to storage for the next visit to resend. What is NOT recoverable is a batch already
+       * in flight: it is neither in the queue nor in `pending`, and the server may well have
+       * accepted it — putting that one back would double-count it, which is the wrong direction to
+       * be wrong on the number this page promises is real.
+       */
+      for (const n of q.clear()) pending.current += n;
+      if (pending.current > 0) writeLocal(UNSENT_KEY, String(Math.min(MAX_CARRIED_TAPS, pending.current)));
+    };
+  }, [ready, applyStreak, throttledNow, backOff]);
 
-  // Reads: stats / leaderboard / me / quests, on load and on a slow poll.
+  /*
+   * Reads: stats / leaderboard / me / quests, on load and on a slow poll.
+   *
+   * Every one of them goes through `readJson`, which reports a 429 as a THROTTLE rather than as
+   * data. That matters because services/game-api now rate-limits its public GETs: a throttled
+   * response is JSON, so the old `(await fetch(...)).json()` parsed it happily and handed the
+   * loop `{error: 'rate limited'}` — the board rendered empty and the loop asked again 4 seconds
+   * later, which is a page answering its own rate limit by hitting the limit harder.
+   *
+   * `backoffUntil` is the shared brake: a throttle from ANY of these parks all of them, because
+   * they share one bucket per client and racing to be the one that recovers first just spends the
+   * budget on whichever loop is fastest.
+   */
   const drawBoard = useCallback(async () => {
-    try {
-      const j = await (await fetch(API + '/leaderboard?limit=5')).json();
-      setBoard({ rows: (j.leaderboard || []).map((x: any) => [x.wallet, x.count] as [string, number]) });
-    } catch { setBoard({ rows: null }); }
-  }, []);
+    if (throttledNow()) return;
+    const r = await readJson<{ leaderboard?: Array<{ wallet: string; count: number }> }>(API + '/leaderboard?limit=5');
+    if (!r.ok) {
+      if (r.throttled) { backOff(r.retryAfterMs); return; } // keep the last real board on screen
+      setBoard({ rows: null }); // a real failure: the funnel shows nothing rather than stale names
+      return;
+    }
+    setBoard({ rows: (r.data.leaderboard || []).map((x) => [x.wallet, x.count] as [string, number]) });
+  }, [throttledNow, backOff]);
 
   const loadMe = useCallback(async () => {
-    try {
-      const j = await (await fetch(API + '/me?' + idFor())).json();
-      applyStreak(j.streak, j.bestStreak);
-      if (j.level) setLevel(j.level);
-      if (j.greeting && (j.taps > 0 || j.bestStreak > 0)) { setLine(j.greeting); setDim(true); }
-    } catch { /* leave her idle chatter */ }
-  }, [idFor, applyStreak]);
+    if (throttledNow()) return;
+    const r = await readJson<{ streak?: number; bestStreak?: number; level?: Level; greeting?: string; taps?: number }>(
+      API + '/me?' + idFor(),
+    );
+    if (!r.ok) {
+      if (r.throttled) backOff(r.retryAfterMs);
+      return; // leave her idle chatter
+    }
+    const j = r.data;
+    applyStreak(j.streak, j.bestStreak);
+    if (j.level) setLevel(j.level);
+    if (j.greeting && ((j.taps ?? 0) > 0 || (j.bestStreak ?? 0) > 0)) { setLine(j.greeting); setDim(true); }
+  }, [idFor, applyStreak, throttledNow, backOff]);
 
   const drawQuests = useCallback(async () => {
-    let j: any;
-    try { j = await (await fetch(API + '/quests?' + idFor() + '&tz=' + TZ, { headers: sessionHeaders(live.current.wallet) })).json(); }
-    catch { return; }
+    if (throttledNow()) return;
+    const r = await readJson<any>(API + '/quests?' + idFor() + '&tz=' + TZ, { headers: sessionHeaders(live.current.wallet) });
+    if (!r.ok) {
+      if (r.throttled) backOff(r.retryAfterMs);
+      return;
+    }
+    const j = r.data;
     if (!j || !Array.isArray(j.quests)) return;
     for (const q of j.quests as Quest[]) {
       if (q.done && !doneQuests.current.has(q.id)) {
@@ -258,76 +328,135 @@ export default function GamePage() {
     }
     seenQuests.current = true;
     setQuests({ list: j.quests, done: j.done, total: j.total, daily: j.daily || null });
-  }, [idFor, floatUp]);
+  }, [idFor, floatUp, throttledNow, backOff]);
 
   useEffect(() => {
     if (!ready || !API) return;
-    (async () => { try { const j = await (await fetch(API + '/stats')).json(); if (typeof j.globalWakes === 'number') setGlobal(j.globalWakes); } catch { /* '…' stays */ } })();
+    (async () => {
+      const r = await readJson<{ globalWakes?: number }>(API + '/stats');
+      if (r.ok && typeof r.data.globalWakes === 'number') setGlobal(r.data.globalWakes);
+      else if (!r.ok && r.throttled) backOff(r.retryAfterMs);
+      // otherwise the counter stays '…' — it never shows a seeded number that later collapses
+    })();
     drawBoard(); loadMe(); drawQuests();
     const b = setInterval(drawBoard, 4000);
     const q = setInterval(drawQuests, 6000);
     return () => { clearInterval(b); clearInterval(q); };
   }, [ready, drawBoard, loadMe, drawQuests]);
 
-  // The contract CTA, written by the verifier or not at all.
+  /*
+   * The contract CTA, written by the verifier or not at all.
+   *
+   * A THROTTLE IS NOT A VERDICT. GET /trust is rate-limited like the other public GETs now, and a
+   * 429 is JSON — so the old `.json()` handed `{error:'rate limited'}` to `ctaState`, which
+   * correctly refuses to recognise it and returns `unverified`. The result was that hitting our own
+   * rate limit made the page stop showing the real, verified contract and tell visitors it could
+   * not confirm one: the funnel disowning its own mint because it polled too fast. On a throttle we
+   * back off and CHANGE NOTHING — the last answer the verifier actually gave stands until it gives
+   * another. Every other failure still lands on `unverified`, which is the honest fail-closed state
+   * for "we could not ask".
+   */
   useEffect(() => {
     if (!API) return;
     const load = async () => {
-      let rep: unknown = null;
-      try { rep = await (await fetch(API + '/trust', { headers: { accept: 'application/json' } })).json(); } catch { rep = null; }
-      const st = ctaState(rep);
+      const r = await readJson<unknown>(API + '/trust', { headers: { accept: 'application/json' } });
+      if (!r.ok && r.throttled) { backOff(r.retryAfterMs); return; }
+      const st = ctaState(r.ok ? r.data : null);
       setCta(st);
-      setCaLabel(st.cta ? 'CA: ' + st.cta.short + ' — tap to copy' : st.state === 'not-launched' ? 'CA: not launched yet' : 'CA: unverified');
+      setCaText(caLabel(st));
     };
     load();
-    const id = setInterval(load, 60000);
+    const id = setInterval(() => { if (!throttledNow()) load(); }, 60000);
     return () => clearInterval(id);
-  }, []);
+  }, [throttledNow, backOff]);
 
-  const copyCa = () => {
+  /**
+   * Copy the verified mint — and say "copied" only when the clipboard actually took it.
+   *
+   * Both failure paths used to be silent. `navigator.clipboard` is undefined on a non-secure origin
+   * and in several mobile in-app browsers, where the optional chain made the write a no-op; and a
+   * rejected `writeText` — a denied clipboard permission, a call outside a user gesture — was
+   * swallowed by an empty `.catch`. The header said "copied ✅" in both cases, so the user pasted
+   * into a swap and got whatever was on their clipboard before, which on a memecoin buyer's
+   * clipboard is very often another token address somebody sent them. Everything else on this page
+   * refuses to state an outcome it did not verify; this is the same rule applied to the clipboard.
+   *
+   * On failure it prints the FULL mint rather than an apology, so the address can still be selected
+   * by hand — and it does not auto-revert, because a message you need to read and copy from must not
+   * disappear after a second and a half.
+   */
+  const copyCa = async () => {
     const mint = cta && cta.cta ? cta.cta.mint : '';
+    const short = cta && cta.cta ? cta.cta.short : '';
     if (!mint) {
-      setCaLabel('no verified contract to copy — beware impostors');
-      setTimeout(() => setCaLabel(cta?.state === 'not-launched' ? 'CA: not launched yet' : 'CA: unverified'), 2000);
+      setCaText('no verified contract to copy — beware impostors');
+      setTimeout(() => setCaText(caLabel(cta)), 2000);
       return;
     }
-    navigator.clipboard?.writeText(mint).catch(() => {});
-    setCaLabel('copied ✅ ' + cta!.cta!.short);
-    setTimeout(() => setCaLabel('CA: ' + cta!.cta!.short + ' — tap to copy'), 1500);
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+        throw new Error('no clipboard api');
+      }
+      await navigator.clipboard.writeText(mint);
+    } catch {
+      setCaText('could not copy — the address is ' + mint);
+      return;
+    }
+    setCaText('copied ✅ ' + short);
+    setTimeout(() => setCaText(caLabel(cta)), 1500);
   };
 
   const connect = async () => {
-    const provider = (window as any).solana;
-    if (!provider?.isPhantom) { setWalletMsg('Phantom not found — opening install…'); window.open('https://phantom.app/', '_blank'); return; }
+    const p = provider();
+    if (!p) { setWalletMsg('Phantom not found — opening install…'); window.open('https://phantom.app/', '_blank', 'noopener'); return; }
+    let w = '';
+    let session = '';
     try {
       setWalletMsg('sign the message to verify…');
-      const resp = await provider.connect();
-      const w: string = resp?.publicKey?.toString?.() || '';
-      if (!w) throw new Error('no public key');
-      const { message } = await (await fetch(API + '/auth/nonce?wallet=' + w)).json();
-      if (typeof message !== 'string') throw new Error('no nonce');
-      const signed = await provider.signMessage(new TextEncoder().encode(message), 'utf8');
-      const v = await (await fetch(API + '/auth/verify', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ wallet: w, signature: bs58encode(signed.signature), nonce: message.slice(message.lastIndexOf(' ') + 1) }),
-      })).json();
-      if (!v.verified) { setWalletMsg('❌ verification failed'); return; }
-      const session: string | null = typeof v.session === 'string' && v.session ? v.session : null;
-      if (session) saveSession(w, session);
-      setWallet(w); setWalletId(w);
-      let claimed = 0;
-      if (session) {
-        try {
-          const c = await (await fetch(API + '/claim', {
-            method: 'POST', headers: { 'content-type': 'application/json', [SESSION_HEADER]: session },
-            body: JSON.stringify({ wallet: w, device: device.current }),
-          })).json();
-          claimed = c.claimed || 0;
-        } catch { /* connect stands; claim retriable */ }
-      }
-      setWalletMsg('✅ ' + shortAddr(w) + ' connected' + (claimed > 0 ? ' · claimed ' + claimed.toLocaleString() + ' taps' : session ? '' : ' · guest taps not claimed'));
-      drawQuests();
-    } catch { setWalletMsg('connect cancelled'); }
+      ({ wallet: w, session } = await connectWallet(p));
+    } catch {
+      setWalletMsg('connect cancelled');
+      return;
+    }
+    setWallet(w);
+    // /claim MOVES SCORE, so it authenticates the session token — never a bare public key, which is
+    // public and printed on the leaderboard. Without a token the connect still stands; the guest
+    // taps just stay on the device id until a session exists.
+    let claimed = 0;
+    if (session) {
+      try {
+        const c = await (await fetch(API + '/claim', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...sessionHeaders(session) },
+          signal: apiDeadline(),
+          body: JSON.stringify({ wallet: w, device: device.current }),
+        })).json();
+        claimed = Number(c?.claimed) || 0;
+      } catch { /* connect stands; the claim is retried on the next connect */ }
+    }
+    setWalletMsg('✅ ' + shortAddr(w) + ' connected'
+      + (claimed > 0 ? ' · claimed ' + claimed.toLocaleString() + ' taps' : session ? '' : ' · guest taps not claimed'));
+    drawQuests();
+  };
+
+  /**
+   * The streak-saver: a web push that brings a lapsing player back.
+   *
+   * services/game-api ships the whole server half of this (webpush.ts, push.ts, push-admin.ts) and
+   * nothing ever subscribed, so `push_subs` stayed empty and every sweep found nobody to remind.
+   * The offer only renders when this deployment can actually deliver one — a configured VAPID key,
+   * a supporting browser, permission not already denied — because a subscription minted against the
+   * wrong key is one the server can never push to.
+   */
+  const armStreakSaver = async () => {
+    setPushMsg('asking your browser…');
+    const r = await subscribeToStreakSaver({ wallet: live.current.wallet, device: device.current });
+    if (r.ok) {
+      setPushArmed(true);
+      setPushMsg(r.alreadySubscribed ? "✅ still armed — she'll nudge you before your streak lapses." : "✅ armed. she'll nudge you before your streak lapses.");
+    } else {
+      setPushMsg(r.why);
+    }
   };
 
   const share = () => {
@@ -343,12 +472,12 @@ export default function GamePage() {
   return (
     <div className="npcg-root">
       <Head><title>$NPC — tap to wake her</title></Head>
-      <style>{CSS}</style>
+      <style>{NPC_CSS}</style>
 
       <div className="npcg-wrap">
         <header className="npcg-head">
           <div className="npcg-logo">$<b>NPC</b></div>
-          <button onClick={copyCa} className="npcg-ca" title="the mint, once the verifier publishes one">{caLabel}</button>
+          <button onClick={copyCa} className="npcg-ca" title="the mint, once the verifier publishes one">{caText}</button>
         </header>
 
         <div className="npcg-stage">
@@ -402,10 +531,23 @@ export default function GamePage() {
           {quests?.list.map((q) => <QuestRow key={q.id} {...q} />)}
         </Panel>
 
-        <div className="npcg-links"><a href="/">🎤 Talk to her</a><a href="/trust">🛡️ Trust</a></div>
+        <div className="npcg-links">
+          <a href="/">🎤 Talk to her</a>
+          <a href="/holder">💠 Holder</a>
+          <a href="/trust">🛡️ Trust</a>
+        </div>
 
-        <button onClick={connect} className="npcg-btn">{wallet ? '🔗 Connected' : '🔗 Connect Phantom'}</button>
+        <button onClick={connect} className="npcg-btn">{wallet ? '🔗 ' + shortAddr(wallet) : '🔗 Connect Phantom'}</button>
         <div className="npcg-muted npcg-center">{walletMsg}</div>
+
+        {pushOffer && (
+          <>
+            <button onClick={armStreakSaver} disabled={pushArmed} className="npcg-btn">
+              {pushArmed ? '🔔 Streak saver armed' : '🔔 Remind me before my streak dies'}
+            </button>
+            <div className="npcg-muted npcg-center">{pushMsg}</div>
+          </>
+        )}
 
         <p className="npcg-fine">
           $NPC is a meme collectible for entertainment. It has no intrinsic value, no team, no roadmap promises,
@@ -432,42 +574,3 @@ function QuestRow({ label, progress, goal, done, reward }: { label: string; prog
     </div>
   );
 }
-
-const CSS = `
-.npcg-root{--bg:#07070c;--panel:#0e0e18;--line:#1c1c2e;--neon:#00ffa3;--violet:#8b5cf6;--dim:#7a7a92;--ink:#e8e8f2;--bad:#ff2e63;--warn:#ffb020;
-  position:fixed;inset:0;overflow:auto;background:radial-gradient(900px 500px at 50% -5%,#15152c,var(--bg) 60%);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;z-index:50}
-.npcg-wrap{max-width:420px;margin:0 auto;padding:24px 16px 80px}
-.npcg-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px}
-.npcg-logo{font-size:20px;font-weight:800}.npcg-logo b{color:var(--neon)}
-.npcg-ca{background:none;border:0;color:var(--dim);font:inherit;font-size:11px;cursor:pointer}
-.npcg-stage{position:relative;border:1px solid var(--line);background:var(--panel);border-radius:16px;padding:28px 16px;text-align:center}
-.npcg-line{min-height:34px;font-size:13px;line-height:1.5;color:var(--ink)}.npcg-line.dim{color:var(--dim)}
-.npcg-face{background:none;border:0;cursor:pointer;font-size:86px;line-height:1;margin:12px 0;transition:transform .05s}.npcg-face:active{transform:scale(.95)}.npcg-face.sleepy{opacity:.7}
-.npcg-coach{margin-bottom:8px;font-size:13px}.npcg-coach b{color:var(--neon)}.npcg-coach div{font-size:11px;color:var(--dim)}
-.npcg-bar-row{display:flex;justify-content:space-between;font-size:10px;letter-spacing:2px;color:var(--dim);margin-bottom:4px}
-.npcg-bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden}.npcg-bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--violet),var(--neon));transition:width .2s}
-.npcg-float{position:fixed;transform:translate(-50%,0);color:var(--neon);font-weight:800;pointer-events:none;animation:npcg-up .9s ease-out forwards;z-index:60}
-@keyframes npcg-up{from{opacity:1;transform:translate(-50%,0)}to{opacity:0;transform:translate(-50%,-40px)}}
-.npcg-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
-.npcg-card{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:12px}
-.npcg-span{grid-column:span 2}
-.npcg-k{font-size:10px;letter-spacing:2px;color:var(--dim)}
-.npcg-v{font-size:18px;font-weight:700}.npcg-v.neon{color:var(--neon)}
-.npcg-sub{font-size:10px;color:var(--dim);margin-top:4px}
-.npcg-cta-row{display:flex;gap:8px;margin-top:12px}
-.npcg-buy{flex:1;text-align:center;padding:12px;border-radius:12px;font-weight:800;text-decoration:none;color:#04120b;background:linear-gradient(90deg,var(--violet),var(--neon))}
-.npcg-chart{flex:1;text-align:center;padding:12px;border-radius:12px;font-weight:700;text-decoration:none;color:var(--ink);border:1px solid var(--line)}
-.npcg-notice{margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:12px;line-height:1.5;color:var(--dim)}
-.npcg-notice.unsafe{border-color:var(--bad);color:var(--bad)}.npcg-notice.caution{border-color:var(--warn);color:var(--warn)}
-.npcg-btn{margin-top:12px;width:100%;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:12px;padding:12px;font:inherit;font-weight:700;cursor:pointer}
-.npcg-panel{margin-top:20px;border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:12px}
-.npcg-panel h3{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--dim);margin:0 0 8px}
-.npcg-lb{display:flex;justify-content:space-between;border-bottom:1px dashed var(--line);padding:8px 0;font-size:13px}
-.npcg-rank{color:var(--dim);margin-right:8px}.neon{color:var(--neon)}
-.npcg-muted{font-size:12px;color:var(--dim)}.npcg-center{text-align:center;min-height:14px;margin-top:4px}
-.npcg-quest{margin-bottom:8px}.npcg-quest.done{opacity:.7}
-.npcg-quest-top{display:flex;justify-content:space-between;font-size:12px}
-.npcg-quest-bar{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin:4px 0}.npcg-quest-bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--violet),var(--neon))}
-.npcg-links{display:flex;justify-content:center;gap:16px;margin-top:16px;font-size:12px}.npcg-links a{color:var(--dim);text-decoration:none}
-.npcg-fine{margin-top:24px;text-align:center;font-size:10px;line-height:1.6;color:var(--dim)}
-`;

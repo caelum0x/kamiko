@@ -130,34 +130,67 @@ export default function Share() {
   }, [vrmSaveType, vrmLoadedFromIndexedDb, vrmLoadingFromIndexedDb]);
 
   const [isRegistering, setIsRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState('');
+
+  /**
+   * Where this page's character registry lives. NOT the $NPC funnel API — this is upstream amica's
+   * own character-sharing backend, and it is a completely separate deployment concern.
+   *
+   * It is read once, here, so the button can refuse before it spins. Unset, the template literal
+   * below built the literal URL `undefined/api/add_character`; the fetch rejected, nothing caught
+   * it, and `setIsRegistering(false)` never ran — so the only failure mode on a deployment that has
+   * not configured it was a Save button stuck in its registering state forever with no message.
+   */
+  const AMICA_API_URL = process.env.NEXT_PUBLIC_AMICA_API_URL || '';
+
   function registerCharacter() {
+    if (!AMICA_API_URL) {
+      setRegisterError(t("Character sharing is not configured on this deployment (NEXT_PUBLIC_AMICA_API_URL is unset), so there is nowhere to save this character."));
+      return;
+    }
+    setRegisterError('');
     setIsRegistering(true);
 
     async function register() {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_AMICA_API_URL}/api/add_character`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          description,
-          name,
-          system_prompt: systemPrompt,
-          vision_system_prompt: visionSystemPrompt,
-          bg_url: bgUrl,
-          youtube_videoid: youtubeVideoId,
-          vrm_url: vrmUrl,
-          animation_url: animationUrl,
-          voice_url: voiceUrl,
-        }),
-      });
-
-      const data = await res.json();
-      console.log('response', data);
-
-      setSqid(data.sqid);
-
-      setIsRegistering(false);
+      /*
+       * EVERY EXIT FROM HERE CLEARS `isRegistering`, and the sqid is only set from a response that
+       * actually carried one. `setSqid` gates the whole rest of this page into its read-only
+       * "saved" state, so accepting a `data.sqid` of undefined out of an error body would print a
+       * share link to `/import/undefined` and lock the form behind it.
+       */
+      try {
+        const res = await fetch(`${AMICA_API_URL}/api/add_character`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            description,
+            name,
+            system_prompt: systemPrompt,
+            vision_system_prompt: visionSystemPrompt,
+            bg_url: bgUrl,
+            youtube_videoid: youtubeVideoId,
+            vrm_url: vrmUrl,
+            animation_url: animationUrl,
+            voice_url: voiceUrl,
+          }),
+        });
+        if (!res.ok) {
+          setRegisterError(t("The character server refused to save this character (HTTP {{status}}).", { status: res.status }));
+          return;
+        }
+        const data = await res.json().catch(() => null);
+        if (!data || typeof data.sqid !== 'string' || !data.sqid) {
+          setRegisterError(t("The character server answered without a share code, so nothing was saved."));
+          return;
+        }
+        setSqid(data.sqid);
+      } catch (e: any) {
+        setRegisterError(t("Could not reach the character server ({{reason}}). Nothing was saved.", { reason: e?.message || 'network error' }));
+      } finally {
+        setIsRegistering(false);
+      }
     }
 
     register();
@@ -575,6 +608,9 @@ export default function Share() {
               >
                 {t("Save Character")}
               </button>
+              {registerError && (
+                <p className="mt-2 text-sm text-red-600" role="alert">{registerError}</p>
+              )}
             </div>
           )}
 
