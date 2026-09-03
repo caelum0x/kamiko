@@ -397,7 +397,7 @@ export default function GamePage() {
           {quests?.list.map((q) => <QuestRow key={q.id} {...q} />)}
         </Panel>
 
-        <div className="npcg-links"><a href="/">🎤 Talk to her</a></div>
+        <div className="npcg-links"><a href="/">🎤 Talk to her</a><a href="/trust">🛡️ Trust</a></div>
 
         <button onClick={connect} className="npcg-btn">{wallet ? '🔗 Connected' : '🔗 Connect Phantom'}</button>
         <div className="npcg-muted npcg-center">{walletMsg}</div>
