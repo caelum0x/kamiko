@@ -21,6 +21,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
+import { createQueue } from '../utils/airiQueue.ts'; // merged from airi (packages/stream-kit)
 
 /* ------------------------------------------------------------------ *
  * Config — the funnel backend (bridge origin; it proxies game-api).
@@ -196,28 +197,32 @@ export default function GamePage() {
     setStreak({ streak: s, best: best || s });
   }, []);
 
-  // Flush taps to /wake.
+  // Flush taps to /wake — through airi's stream-kit queue (merged into amica). The queue drains one
+  // batch at a time, so two /wake POSTs can never overlap and race on the once-only ?ref attribution
+  // the way a bare setInterval(fetch) could when a request outran the 2s tick. On a failed send its
+  // `error` event keeps the taps counted locally rather than losing them.
   useEffect(() => {
     if (!ready || !API) return;
-    const flush = async () => {
-      if (pending.current <= 0) return;
-      const n = pending.current;
-      pending.current = 0;
-      try {
+    const q = createQueue<number>({
+      handlers: [async ({ data: n }) => {
         const r = await fetch(API + '/wake', {
           method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ taps: n, wallet: live.current.wallet || undefined, device: device.current, tz: TZ, ref: ref.current || undefined }),
         });
-        ref.current = '';
+        ref.current = ''; // attributed (or rejected) once — never resent
         const j = await r.json();
         if (typeof j.globalWakes === 'number') setGlobal(j.globalWakes);
         applyStreak(j.streak, j.bestStreak);
-      } catch {
-        setGlobal((g) => (g === null ? g : g + n));
-      }
-    };
-    const id = setInterval(flush, 2000);
-    return () => clearInterval(id);
+      }],
+    });
+    q.on('error', (n) => setGlobal((g) => (g === null ? g : g + (n as number))));
+    const id = setInterval(() => {
+      if (pending.current <= 0) return;
+      const n = pending.current;
+      pending.current = 0;
+      q.enqueue(n);
+    }, 2000);
+    return () => { clearInterval(id); q.clear(); };
   }, [ready, applyStreak]);
 
   // Reads: stats / leaderboard / me / quests, on load and on a slow poll.
