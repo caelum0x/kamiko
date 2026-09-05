@@ -42,6 +42,10 @@ function str(v: unknown, max: number): string | null {
 const posInt = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null;
 
+/** A string, or an array's string members joined — bounded either way. Anything else is null. */
+const textOrJoined = (v: unknown, max = 500): string | null =>
+  str(v, max) ?? (Array.isArray(v) ? str(v.filter((x) => typeof x === 'string').join(' '), max) : null);
+
 /* ------------------------------------------------------------------ *
  * Badges — the tone is derived from facts, never from hope.
  * ------------------------------------------------------------------ */
@@ -152,15 +156,20 @@ export function parseAgentDetail(body: unknown): AgentDetail | null {
   const r = body as Record<string, unknown>;
   // The detail route does not send trustGrade — its grade arrives via the /trust view. Keep the
   // summary's fail-closed defaults and add the detail-only fields.
+  //
+  // `about` looks in the character-kit shape first (`persona.system` / `persona.bio` — the schema
+  // the registry's admission gate validates) and then in the looser bio/system spellings other
+  // card formats use. Text only, bounded, never executed.
   let about: string | null = null;
   const ch = r.character;
   if (ch && typeof ch === 'object') {
     const c = ch as Record<string, unknown>;
+    const persona = c.persona && typeof c.persona === 'object' ? (c.persona as Record<string, unknown>) : {};
     about =
-      str(c.bio, 500) ??
-      str(Array.isArray(c.bio) ? (c.bio as unknown[]).filter((x) => typeof x === 'string').join(' ') : null, 500) ??
-      str(c.system, 500) ??
-      str(Array.isArray(c.system) ? (c.system as unknown[]).filter((x) => typeof x === 'string').join(' ') : null, 500);
+      textOrJoined(persona.system) ??
+      textOrJoined(persona.bio) ??
+      textOrJoined(c.bio) ??
+      textOrJoined(c.system);
   }
   return { ...base, pledgeSigner: str(r.pledgeSigner, 64), about };
 }
