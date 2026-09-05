@@ -722,6 +722,12 @@ export class Chat {
       case "arbius_llm":
         return getArbiusChatResponseStream(messages);
       case "chatgpt":
+      // "openai" is what tooling/scripts/amica-preset.ts wrote for this same backend before the
+      // preset was fixed (openAiChat.ts is an OpenAI-compatible POST to
+      // ${openai_url}/v1/chat/completions — our bridge). Without this alias that value matched NO
+      // case and silently became the echo backend below, so the avatar parroted the user instead
+      // of calling her own brain. Kept so an already-generated .env.local keeps working.
+      case "openai":
         return getOpenAiChatResponseStream(messages);
       case "llamacpp":
         return getLlamaCppChatResponseStream(messages);
