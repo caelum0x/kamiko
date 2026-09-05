@@ -535,6 +535,7 @@ export default function GamePage() {
           <a href="/">🎤 Talk to her</a>
           <a href="/holder">💠 Holder</a>
           <a href="/trust">🛡️ Trust</a>
+          <a href="/agents">🤖 Agents</a>
         </div>
 
         <button onClick={connect} className="npcg-btn">{wallet ? '🔗 ' + shortAddr(wallet) : '🔗 Connect Phantom'}</button>

@@ -34,6 +34,15 @@ const trimSlash = (s: string): string => s.replace(/\/+$/, '');
 export const API = trimSlash(process.env.NEXT_PUBLIC_NPC_API || '');
 
 /**
+ * The kamiko.fun registry origin (services/registry, :8790 by default) that the /agents directory
+ * and marketplace pages read. Resolved here for the same reason API is: one module decides where
+ * the registry lives, not each page. '' means "not configured" and the pages say exactly that —
+ * an empty directory and an unreachable registry are different states, and both are stated
+ * honestly rather than guessed around.
+ */
+export const REGISTRY = trimSlash(process.env.NEXT_PUBLIC_NPC_REGISTRY || '');
+
+/**
  * The SOL tip destination. Must equal `NPC_TIP_WALLET` on services/game-api — the api credits ONLY
  * a transfer it can read back off the chain as going to its own configured address. '' disables
  * tipping in the UI, which is the honest state when we cannot build a transfer the api will accept.
