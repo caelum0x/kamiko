@@ -32,6 +32,7 @@ import { VRM } from '@pixiv/three-vrm'
 
 import { createVarModel } from '@/airi/motion'
 import type { Generator, TrainingSequence } from '@/airi/motion'
+import { moodFor, NEUTRAL_MOOD, type IdleMood } from './emotionMood'
 
 /** Generation cadence. The model emits frames at this rate; the render loop interpolates between. */
 const SAMPLE_RATE_HZ = 30
@@ -124,6 +125,17 @@ export class StatisticalIdleAnimation {
 
   private readonly step = 1 / SAMPLE_RATE_HZ
 
+  /**
+   * Emotion-driven temperament (see emotionMood.ts): the target set by `setEmotion` and the
+   * eased value the frame actually uses — a mood lands over ~a second, it does not jump-cut the
+   * whole body the way the face used to.
+   */
+  private moodTarget: IdleMood = NEUTRAL_MOOD
+  private mood: IdleMood = { ...NEUTRAL_MOOD }
+
+  /** Seconds for the mood to close ~63% of the gap to its target. */
+  private static readonly MOOD_TAU_S = 0.8
+
   constructor(vrm: VRM, seed = 1) {
     this.vrm = vrm
     try {
@@ -146,11 +158,31 @@ export class StatisticalIdleAnimation {
     return this.generator !== null
   }
 
+  /**
+   * Let the current emotion colour the idle: [angry] paces faster and wider, [sleep] slows and
+   * shrinks. Unknown tags read as neutral (moodFor's rule), so this can never destabilise the rig.
+   */
+  public setEmotion(emotion: string): void {
+    this.moodTarget = moodFor(emotion)
+  }
+
+  /** The eased temperament the current frame runs at (exposed for tests). */
+  public get currentMood(): Readonly<IdleMood> {
+    return this.mood
+  }
+
   public update(delta: number): void {
     // A tab that was backgrounded returns a delta of many seconds. Stepping the generator that many
     // times would burn a visible hitch on the first frame back; the idle has no state worth
     // catching up on, so the step is bounded.
-    const dt = Number.isFinite(delta) ? clamp(delta, 0, 0.25) : 0
+    const rawDt = Number.isFinite(delta) ? clamp(delta, 0, 0.25) : 0
+
+    // Ease the mood toward its target, then let tempo scale time itself: one clock for both the
+    // model stream and the authored fallback, so a mood change never desynchronises the two paths.
+    const ease = 1 - Math.exp(-rawDt / StatisticalIdleAnimation.MOOD_TAU_S)
+    this.mood.tempo += (this.moodTarget.tempo - this.mood.tempo) * ease
+    this.mood.sway += (this.moodTarget.sway - this.mood.sway) * ease
+    const dt = rawDt * this.mood.tempo
     this.elapsedTime += dt
 
     const humanoid = this.vrm?.humanoid
@@ -161,7 +193,10 @@ export class StatisticalIdleAnimation {
       const c = CHANNELS[i]
       const node = humanoid.getNormalizedBoneNode(c.bone)
       if (!node) continue // a VRM without this bone is valid; skip the channel rather than throw
-      node.rotation[c.axis] = clamp(values[i], c.base - c.limit, c.base + c.limit)
+      // Sway scales the deviation from the base pose, and the hard envelope still has the last
+      // word — a mood can lean on the clamp, never through it.
+      const swayed = c.base + (values[i] - c.base) * this.mood.sway
+      node.rotation[c.axis] = clamp(swayed, c.base - c.limit, c.base + c.limit)
     }
   }
 

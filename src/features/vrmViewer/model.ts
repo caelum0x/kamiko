@@ -414,6 +414,8 @@ export class Model {
 
   public async playEmotion(expression: string) {
     this.emoteController?.playEmotion(expression);
+    // The body idles in the same mood as the face — see emotionMood.ts.
+    this.proceduralAnimation?.setEmotion(expression);
   }
 
   /**
@@ -421,6 +423,7 @@ export class Model {
    */
   public async speak(buffer: ArrayBuffer, screenplay: Screenplay) {
     this.emoteController?.playEmotion(screenplay.expression);
+    this.proceduralAnimation?.setEmotion(screenplay.expression);
     await new Promise((resolve) => {
       this._lipSync?.playFromArrayBuffer(buffer, () => {
         resolve(true);
@@ -430,8 +433,16 @@ export class Model {
 
   public update(delta: number): void {
     if (this._lipSync) {
-      const { volume } = this._lipSync.update();
-      this.emoteController?.lipSync("aa", volume);
+      // Viseme mouth when airi's wLipSync worklet is running; the original volume mouth when it
+      // is not (insecure context, no AudioWorklet). Both paths are decided per frame, so a
+      // worklet that dies mid-show degrades gracefully instead of freezing the mouth.
+      const vowels = this._lipSync.vowelFrame(delta);
+      if (vowels) {
+        this.emoteController?.lipSyncVisemes(vowels);
+      } else {
+        const { volume } = this._lipSync.update();
+        this.emoteController?.lipSync("aa", volume);
+      }
     }
 
     this.emoteController?.update(delta);
