@@ -19,18 +19,12 @@ export const Introduction = ({ open }: {
       <div className="mx-auto max-h-full overflow-auto rounded-lg bg-white/40 p-4 backdrop-blur-lg shadow-lg">
         <div className="my-4">
           <div className="my-8 font-bold text-xl">
-            {t("Welcome to Amica")}
+            {t("Welcome to $NPC")}
           </div>
           <p>{t("amica_intro", `
-            Amica is an open source chatbot interface that provides emotion, vision, animations, self triggered actions, text to speech, and speech to text capabilities.
-            
-            It is designed to be able to be attached to any AI model.
-            
-            It can be used with any VRM model and is very customizable.
-            
-            You can even run Amica on your own computer without an internet connection, or on your phone.
+            $NPC is a real-time VTuber character: a 3D avatar with emotion, motion, voice, and vision, rendered live in your browser.
 
-            On launch Amica uses our demo chatbot and TTS server. It may take time to load the first message you send.
+            The stage runs client-side — the character loads and animates without any account or key. Her full AI conversation and on-chain tipping open at launch.
           `)}
           </p>
         </div>

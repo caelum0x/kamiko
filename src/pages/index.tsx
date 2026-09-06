@@ -343,7 +343,14 @@ export default function Home() {
       m_plus_2.variable,
       montserrat.variable,
     )}>
-      {showStreamWindow && 
+      {/* Minimal, honest footer line. pointer-events-none so it never blocks the chat input. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center">
+        <p className="m-1 rounded bg-black/40 px-2 py-0.5 text-[11px] leading-tight text-white/60 backdrop-blur-sm">
+          Not financial advice. $NPC isn&apos;t live yet — no official contract exists.
+        </p>
+      </div>
+
+      {showStreamWindow &&
 
       <div className="fixed top-1/3 right-4 w-[200px] h-[150px] z-0">
         <video

@@ -553,8 +553,7 @@ export default function GamePage() {
         )}
 
         <p className="npcg-fine">
-          $NPC is a meme collectible for entertainment. It has no intrinsic value, no team, no roadmap promises,
-          and is not an investment or financial advice. Nothing here is a promise of profit. Fair launch only.
+          Not financial advice. $NPC isn&apos;t live yet — no official contract exists.
         </p>
       </div>
     </div>

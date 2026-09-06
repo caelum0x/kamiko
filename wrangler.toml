@@ -1,0 +1,32 @@
+# kamiko.fun — the live $NPC VTuber web app.
+#
+# This REPLACES the old static text landing (infra/deploy/kamiko-site). It serves the real
+# front end (apps/vtuber-amica) as a Next.js static export: the 3D VRM character stage and the
+# /game clicker both render and play CLIENT-SIDE with no keys. The AI chat degrades to an honest
+# in-character "opens at launch" line (NEXT_PUBLIC_CHATBOT_BACKEND=preflight) and on-chain tips
+# stay off until the Solana/game-api bridge is configured — nothing is a dead screen.
+#
+# Build (from apps/vtuber-amica), then deploy from here:
+#   NEXT_OUTPUT=export NEXT_PUBLIC_NPC_API= NEXT_PUBLIC_NPC_REGISTRY= NEXT_PUBLIC_NPC_TIP_WALLET= \
+#     NEXT_PUBLIC_VRM_HASH=/vrm/AvatarSample_B.vrm NEXT_PUBLIC_CHATBOT_BACKEND=preflight \
+#     NEXT_PUBLIC_SHOW_INTRODUCTION=false NEXT_PUBLIC_SHOW_ADD_TO_HOMESCREEN=false npm run build
+#   npx wrangler deploy
+#
+# Reuses the worker name "kamiko-site" so the already-active kamiko.fun custom domain + DNS carry
+# over with no registrar/nameserver step.
+name = "kamiko-site"
+compatibility_date = "2026-01-01"
+account_id = "c7a5b49549dcb64f2e258db485c723ca"
+
+# kamiko.fun is already an active zone in this account, so the custom domain + DNS are managed by
+# this deploy. (Declared before [assets] so TOML does not nest these keys under that table.)
+routes = [
+  { pattern = "kamiko.fun", custom_domain = true },
+  { pattern = "www.kamiko.fun", custom_domain = true },
+]
+
+[assets]
+directory = "./out"
+# Static export uses trailingSlash: true, so /game -> /game/index.html.
+html_handling = "auto-trailing-slash"
+not_found_handling = "404-page"

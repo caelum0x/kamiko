@@ -54,3 +54,7 @@ working/*
 /public/workbox-*.js.map
 /public/worker-*.js
 /public/worker-*.js.map
+
+# wrangler build/deploy temp
+.wrangler/
+out/

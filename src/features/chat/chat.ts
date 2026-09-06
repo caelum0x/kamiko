@@ -4,6 +4,7 @@ import { Viewer } from "@/features/vrmViewer/viewer";
 import { Alert } from "@/features/alert/alert";
 
 import { getEchoChatResponseStream } from "./echoChat";
+import { getPreflightChatResponseStream } from "./preflightChat";
 import {
   getArbiusChatResponseStream,
 } from "./arbiusChat";
@@ -719,6 +720,10 @@ export class Chat {
     } 
 
     switch (chatbotBackend) {
+      // Honest pre-launch state: she speaks a canned "opens at launch" line instead of parroting
+      // the user (echo) or reaching a brain we haven't wired. Set via NEXT_PUBLIC_CHATBOT_BACKEND.
+      case "preflight":
+        return getPreflightChatResponseStream(messages);
       case "arbius_llm":
         return getArbiusChatResponseStream(messages);
       case "chatgpt":
