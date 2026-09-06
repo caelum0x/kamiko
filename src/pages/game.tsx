@@ -472,7 +472,9 @@ export default function GamePage() {
   return (
     <div className="npcg-root">
       <Head><title>$NPC — tap to wake her</title></Head>
-      <style>{NPC_CSS}</style>
+      {/* raw-text element — see agents.tsx: a text child is SSR entity-escaped (`>` → `&gt;`) and
+          never un-escaped, breaking `.npcg-bar>span` pre-hydration and mismatching hydration. */}
+      <style dangerouslySetInnerHTML={{ __html: NPC_CSS }} />
 
       <div className="npcg-wrap">
         <header className="npcg-head">

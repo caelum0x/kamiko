@@ -142,7 +142,12 @@ export default function AgentsPage() {
   return (
     <div className="npcg-root npca-root">
       <Head><title>$NPC — agents</title></Head>
-      <style>{NPC_CSS + AGENTS_CSS}</style>
+      {/* dangerouslySetInnerHTML, not a text child: <style> is a raw-text element, so React's SSR
+          entity-escaping (`>` → `&gt;` in `.npcg-bar>span`) is never un-escaped by the HTML parser —
+          the child-combinator rule is dead until hydration AND the text mismatch makes React throw
+          away the whole server-rendered tree and re-render client-side. Both strings are our own
+          compile-time constants, never user input. */}
+      <style dangerouslySetInnerHTML={{ __html: NPC_CSS + AGENTS_CSS }} />
       <div className="npcg-wrap npca-wrap">
         <header className="npcg-head">
           <div className="npcg-logo">$<b>NPC</b> <span className="npca-sub">/ agents</span></div>

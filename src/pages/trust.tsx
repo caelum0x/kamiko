@@ -112,7 +112,9 @@ export default function TrustPage() {
   return (
     <div className="npct-root">
       <Head><title>$NPC — trust</title></Head>
-      <style>{CSS}</style>
+      {/* raw-text element — see agents.tsx: a text child is SSR entity-escaped (`>` → `&gt;`) and
+          never un-escaped, breaking child-combinator rules pre-hydration and mismatching hydration. */}
+      <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="npct-wrap">
         <header className="npct-head">
           <div className="npct-logo">$<b>NPC</b> <span>/ trust</span></div>

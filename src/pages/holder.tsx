@@ -401,7 +401,9 @@ export default function HolderPage() {
   return (
     <div className="npcg-root">
       <Head><title>$NPC — holder dashboard</title></Head>
-      <style>{NPC_CSS}</style>
+      {/* raw-text element — see agents.tsx: a text child is SSR entity-escaped (`>` → `&gt;`) and
+          never un-escaped, breaking `.npcg-bar>span` pre-hydration and mismatching hydration. */}
+      <style dangerouslySetInnerHTML={{ __html: NPC_CSS }} />
 
       <div className="npcg-wrap">
         <header className="npcg-head">
