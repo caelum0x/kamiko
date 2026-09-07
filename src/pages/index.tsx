@@ -697,7 +697,13 @@ export default function Home() {
               bot.viewer?.model?.playEmotion(mood);
             } catch { /* the model or amicaLife is not up yet; a tap must not throw on the stage */ }
           }}
-          openDashboard={() => router.push("/game")}
+          openLink={(url) => {
+            // The panel never navigates this tab — the whole point of moving the dashboard onto
+            // the stage is that you do not leave her to use it. A buy/chart link is the one thing
+            // that genuinely belongs somewhere else, so it opens in a new tab, with noopener so
+            // the destination cannot reach back into this window.
+            try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* popup blocked */ }
+          }}
           onClose={() => setShowTapToWake(false)}
         />
       )}

@@ -70,7 +70,10 @@ function codeOnly(source: string): string {
  * somebody fixes it now or after the launch.
  */
 const FUNNEL: ReadonlyArray<{ route: string; why: string }> = [
-  { route: '/game', why: 'the clicker dashboard — the leaderboard, quests, the CTA, the wallet handshake and the streak saver' },
+  // `/game` is deliberately ABSENT from this list now. Its content is rendered on `/` itself (see
+  // "the clicker dashboard is ON the page" below), so requiring a link to it would be requiring the
+  // navigation the panel exists to remove. The route still works for a direct link; nothing on the
+  // front page sends you there.
   { route: '/holder', why: 'the holder dashboard: tier, perks and SOL tips — the revenue surface' },
   { route: '/trust', why: 'the mint verification a person does BEFORE they buy; unreachable, they buy on trust or not at all' },
 ];
@@ -98,10 +101,32 @@ describe('the front door leads to every funnel surface', () => {
     });
   }
 
-  it('the tap panel offers the rest of the game, not just the tap', () => {
-    // The specific regression: the panel replaced the only button that reached the dashboard.
-    expect(panel).toMatch(/openDashboard/);
-    expect(withoutComments(read('src/pages/index.tsx'))).toMatch(/openDashboard=\{[^}]*\/game/);
+  it('the clicker dashboard is ON the page, not one navigation away', () => {
+    /*
+     * THE RULE CHANGED, DELIBERATELY, AND THIS IS THE STRONGER FORM OF IT.
+     *
+     * The panel used to end in a button that pushed to /game. That is the problem the panel was
+     * built to solve with an extra click in front of it: the avatar is the product, and leaving her
+     * to find out how you are doing is the thing worth not doing. So the leaderboard, the quest
+     * board and the verified-contract CTA render over the stage instead.
+     *
+     * What is asserted is that they are actually THERE — a panel that dropped the link without
+     * gaining the content would pass a weaker test and be a downgrade.
+     */
+    expect(panel).toMatch(/\buseNpcBoard\s*\(/);
+    // jest's expect takes no message argument, so the missing piece is named in the value.
+    const missing = ['rows', 'quests', 'caText', 'copyCa'].filter((piece) => !panel.includes(piece));
+    expect(missing.length ? `the panel does not render: ${missing.join(', ')}` : 'renders all of it').toBe('renders all of it');
+    // And it must not navigate: no router, no href, no push.
+    expect(panel).not.toMatch(/router\.push/);
+    expect(panel).not.toMatch(/openDashboard/);
+  });
+
+  it('the dashboard reads are SHARED with /game, not a second copy', () => {
+    // The refusals in useNpcBoard are the honest-money rules — a leaderboard that shows real
+    // players or nothing, a CTA written by the verifier or not at all. Two copies of those drift,
+    // and the copy that drifts is the one nobody is looking at.
+    expect(codeOnly(read('src/pages/game.tsx'))).toMatch(/\buseNpcBoard\s*\(/);
   });
 
   it('scans a real front door, so a rename cannot make this pass by finding nothing', () => {

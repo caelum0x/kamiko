@@ -19,6 +19,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWakeTaps, type WakeMood } from '@/npc/useWakeTaps';
+import { useNpcBoard } from '@/npc/useNpcBoard';
+import { shortAddr } from '@/npc/identity';
 
 /** One drifting "+1" over the point that was tapped. */
 interface Float {
@@ -29,19 +31,13 @@ interface Float {
 
 export interface TapToWakeProps {
   /**
-   * Open the full `/game` dashboard.
+   * Open the token's buy/chart link in a new tab.
    *
-   * THE PANEL IS NOT THE WHOLE GAME, and the button that used to reach the rest of it is now this
-   * panel's toggle. Without a way forward from here, `/game` — the leaderboard, quests, the CTA,
-   * the wallet handshake and the streak saver — goes back to being the direct-link-only orphan
-   * index.tsx's own comment describes it having been. Somebody tapping is exactly the person who
-   * wants the leaderboard.
-   *
-   * A callback rather than an <a href> or window.open: index.tsx routes with `router.push`, which
-   * applies next.config.js's basePath. window.open takes a raw URL and does not, so on a BASE_PATH
-   * deployment a hardcoded link here would 404.
+   * A callback rather than an <a href> for the same reason the panel does not navigate at all: the
+   * host page decides how a link leaves this origin, and it is the only place that knows whether a
+   * BASE_PATH applies.
    */
-  openDashboard: () => void;
+  openLink?: (url: string) => void;
   /**
    * Put her FACE in a mood, with no audio.
    *
@@ -70,7 +66,7 @@ export interface TapToWakeProps {
   onClose: () => void;
 }
 
-export function TapToWake({ speak, setMood, onTap: onTapSignal, openDashboard, onClose }: TapToWakeProps) {
+export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClose }: TapToWakeProps) {
   const [line, setLine] = useState<string | null>(null);
   const [floats, setFloats] = useState<Float[]>([]);
   const seq = useRef(0);
@@ -90,7 +86,19 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openDashboard, o
     speakRef.current?.(text);
   }, []);
 
-  const { configured, taps, awake, global, streak, mood, tap } = useWakeTaps({ onGreeting });
+  const engine = useWakeTaps({ onGreeting });
+  const { configured, taps, awake, global, streak, level, mood, tap, ready, throttledNow, backOff, wallet, device } = engine;
+
+  /*
+   * THE DASHBOARD IS HERE, NOT ONE NAVIGATION AWAY.
+   *
+   * This panel used to end in a "leaderboard, quests & rewards →" button that pushed to /game —
+   * which is the problem the panel was built to solve, with an extra click in front of it. The
+   * avatar is the product; leaving her to find out how you are doing is the thing worth not doing.
+   * The reads are shared with /game (src/npc/useNpcBoard.ts) rather than copied, and they take THIS
+   * hook's throttle brake, because every call both hooks make comes out of one per-client bucket.
+   */
+  const board = useNpcBoard({ throttledNow, backOff, ready, wallet, device });
 
   /**
    * Drive her expression from the meter — ONLY WHEN IT CHANGES.
@@ -194,13 +202,80 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openDashboard, o
 
       {line ? <p className="mt-2 border-t border-white/15 pt-2 text-xs italic opacity-80">{line}</p> : null}
 
-      {/* The way forward. See `openDashboard` above for why this is a callback and not a link. */}
-      <button
-        onClick={openDashboard}
-        className="mt-3 w-full rounded-lg border border-white/20 py-1.5 text-xs opacity-80 hover:opacity-100"
-      >
-        leaderboard, quests &amp; rewards →
-      </button>
+      {/* ── THE DASHBOARD, IN PLACE ────────────────────────────────────────────────────────── */}
+
+      {/*
+        LEADERBOARD — real players or nothing. `rows === null` is a failed read, and it renders as a
+        refusal rather than as an empty board, because "nobody is playing" and "we could not ask"
+        are different statements and only one of them is ever true here.
+      */}
+      <div className="mt-3 border-t border-white/15 pt-2">
+        <div className="text-[10px] uppercase tracking-widest opacity-60">leaderboard</div>
+        {board.rows === null ? (
+          <p className="mt-1 text-[11px] opacity-60">could not reach the board — showing nothing rather than names that may be stale.</p>
+        ) : board.rows.length === 0 ? (
+          <p className="mt-1 text-[11px] opacity-60">nobody has tapped yet. be first.</p>
+        ) : (
+          <ol className="mt-1 space-y-0.5 text-[11px]">
+            {board.rows.map(([w, n], i) => (
+              <li key={w} className="flex justify-between gap-2">
+                <span className="truncate opacity-80">{i + 1}. {shortAddr(w)}</span>
+                <span className="tabular-nums opacity-60">{n.toLocaleString()}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      {/* QUESTS */}
+      {board.quests ? (
+        <div className="mt-3 border-t border-white/15 pt-2">
+          <div className="flex justify-between text-[10px] uppercase tracking-widest opacity-60">
+            <span>quests</span>
+            <span>{board.quests.done}/{board.quests.total}</span>
+          </div>
+          <ul className="mt-1 space-y-0.5 text-[11px]">
+            {board.quests.list.slice(0, 4).map((q) => (
+              <li key={q.id} className="flex justify-between gap-2">
+                <span className={'truncate ' + (q.done ? 'opacity-50 line-through' : 'opacity-85')}>{q.label}</span>
+                <span className="tabular-nums opacity-60">{q.done ? '✅' : `${q.progress}/${q.goal}`}</span>
+              </li>
+            ))}
+          </ul>
+          {board.quests.daily ? (
+            <p className="mt-1 text-[11px] opacity-70">
+              today: {board.quests.daily.label} · {board.quests.daily.done ? '✅' : `${board.quests.daily.progress}/${board.quests.daily.goal}`}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* LEVEL */}
+      {level ? (
+        <p className="mt-2 text-[11px] opacity-70">
+          lvl {level.level} · {level.title}
+          {level.tapsToNext == null ? ' · max' : ` · ${level.tapsToNext.toLocaleString()} to ${level.nextTitle}`}
+        </p>
+      ) : null}
+
+      {/*
+        THE CONTRACT — written by the verifier or not at all. A green buy link over a token our own
+        verifier failed, or never graded, is the one thing on this panel that can cost somebody
+        money, so the link renders only for a `live` reading.
+      */}
+      <div className="mt-3 border-t border-white/15 pt-2">
+        <button onClick={() => void board.copyCa()} className="w-full truncate text-left text-[11px] opacity-80 hover:opacity-100">
+          {board.caText}
+        </button>
+        {board.cta?.cta && board.cta.state === 'live' ? (
+          <div className="mt-1 flex gap-2">
+            <button onClick={() => openLink?.(board.cta!.cta!.buy)} className="flex-1 rounded-lg bg-white/15 py-1 text-[11px] hover:bg-white/25">buy</button>
+            <button onClick={() => openLink?.(board.cta!.cta!.chart)} className="flex-1 rounded-lg bg-white/10 py-1 text-[11px] hover:bg-white/20">chart</button>
+          </div>
+        ) : (
+          <p className="mt-1 text-[11px] opacity-60">{board.cta?.detail ?? 'no verified contract yet — beware impostors.'}</p>
+        )}
+      </div>
     </div>
   );
 }

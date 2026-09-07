@@ -23,13 +23,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useWakeTaps } from '../npc/useWakeTaps.ts';
+import { useNpcBoard, type Quest, type Daily } from '../npc/useNpcBoard.ts';
 
 import { API, apiDeadline, readJson } from '../npc/config.ts';
 import {
   TZ, connectWallet, provider, questId, readLocal,
   sessionHeaders, shortAddr, writeLocal,
 } from '../npc/identity.ts';
-import { caLabel, ctaState, type CtaState } from '../npc/cta.ts';
+import type { CtaState } from '../npc/cta.ts';
 import { hasSubscription, pushOfferable, subscribeToStreakSaver } from '../npc/push.ts';
 import { NPC_CSS } from '../npc/styles.ts';
 
@@ -52,18 +53,12 @@ const QUEST_LINE: Record<string, string> = {
 const pick = (pool: string[]) => pool[Math.floor(Math.random() * pool.length)];
 const faceFor = (a: number) => (a < 15 ? '😐' : a < 50 ? '😳' : a < 85 ? '🤯' : '😈');
 
-interface Quest { id: string; label: string; progress: number; goal: number; done: boolean; reward: string }
-interface Daily { label: string; progress: number; goal: number; done: boolean; reward: string }
 interface Float { id: number; x: number; y: number; text: string }
 
 export default function GamePage() {
   const [line, setLine] = useState('// booting…');
   const [dim, setDim] = useState(true);
   const [coach, setCoach] = useState(!readLocal('npc_onboarded'));
-  const [board, setBoard] = useState<{ rows: [string, number][] | null }>({ rows: null });
-  const [quests, setQuests] = useState<{ list: Quest[]; done: number; total: number; daily: Daily | null } | null>(null);
-  const [cta, setCta] = useState<CtaState | null>(null);
-  const [caText, setCaText] = useState('CA: unverified');
   const [walletMsg, setWalletMsg] = useState('');
   const [floats, setFloats] = useState<Float[]>([]);
   const [pushOffer, setPushOffer] = useState(false);
@@ -71,8 +66,6 @@ export default function GamePage() {
   const [pushMsg, setPushMsg] = useState('');
 
   const floatSeq = useRef(0);
-  const seenQuests = useRef(false);
-  const doneQuests = useRef(new Set<string>());
 
   /**
    * THE TAP ENGINE, SHARED WITH THE AVATAR SCREEN.
@@ -89,6 +82,17 @@ export default function GamePage() {
   const onGreeting = useCallback((text: string) => { setLine(text); setDim(true); }, []);
   const engine = useWakeTaps({ onGreeting });
   const { configured, ready, taps, awake, global, streak, level, throttledNow, backOff, device, wallet, setWallet } = engine;
+
+  /**
+   * THE DASHBOARD READS, SHARED WITH THE PANEL ON THE AVATAR SCREEN.
+   *
+   * The leaderboard, the quest board and the verified-contract CTA moved to src/npc/useNpcBoard.ts
+   * when they had to render in two places. The refusals in them are the honest-money rules — real
+   * players or nothing, a CTA written by the verifier or not at all — and the copy that drifts is
+   * always the one nobody is looking at.
+   */
+  const board = useNpcBoard({ throttledNow, backOff, ready, wallet, device });
+  const { rows: boardRows, quests, cta, caText, copyCa, justCompleted, refreshQuests } = board;
 
   /** Mirrors the values the callbacks below read on every tick without re-subscribing. */
   const live = useRef({ taps, awake, wallet, global });
@@ -157,114 +161,29 @@ export default function GamePage() {
    * they share one bucket per client and racing to be the one that recovers first just spends the
    * budget on whichever loop is fastest.
    */
-  const drawBoard = useCallback(async () => {
-    if (throttledNow()) return;
-    const r = await readJson<{ leaderboard?: Array<{ wallet: string; count: number }> }>(API + '/leaderboard?limit=5');
-    if (!r.ok) {
-      if (r.throttled) { backOff(r.retryAfterMs); return; } // keep the last real board on screen
-      setBoard({ rows: null }); // a real failure: the funnel shows nothing rather than stale names
-      return;
-    }
-    setBoard({ rows: (r.data.leaderboard || []).map((x) => [x.wallet, x.count] as [string, number]) });
-  }, [throttledNow, backOff]);
-
-  // /me — the streak, the level and her greeting — is read by the engine, which shares this page's
-  // throttle brake and hands the greeting back through `onGreeting` above.
-
-  const drawQuests = useCallback(async () => {
-    if (throttledNow()) return;
-    const r = await readJson<any>(API + '/quests?' + idFor() + '&tz=' + TZ, { headers: sessionHeaders(live.current.wallet) });
-    if (!r.ok) {
-      if (r.throttled) backOff(r.retryAfterMs);
-      return;
-    }
-    const j = r.data;
-    if (!j || !Array.isArray(j.quests)) return;
-    for (const q of j.quests as Quest[]) {
-      if (q.done && !doneQuests.current.has(q.id)) {
-        if (seenQuests.current) {
-          floatUp(typeof window !== 'undefined' ? window.innerWidth / 2 : 200, 220, '✨ QUEST DONE');
-          if (QUEST_LINE[q.id]) { setLine(QUEST_LINE[q.id]); setDim(false); }
-        }
-        doneQuests.current.add(q.id);
-      }
-    }
-    seenQuests.current = true;
-    setQuests({ list: j.quests, done: j.done, total: j.total, daily: j.daily || null });
-  }, [idFor, floatUp, throttledNow, backOff]);
-
-  // The dashboard polls. /stats and /me are the engine's (it keeps the global counter honest —
-  // '…' until a real number lands — and hands her greeting back through onGreeting); what is left
-  // here is the leaderboard and the quest board, which only this page renders.
-  useEffect(() => {
-    if (!ready || !API) return;
-    drawBoard(); drawQuests();
-    const b = setInterval(drawBoard, 4000);
-    const q = setInterval(drawQuests, 6000);
-    return () => { clearInterval(b); clearInterval(q); };
-  }, [ready, drawBoard, drawQuests]);
-
   /*
-   * The contract CTA, written by the verifier or not at all.
+   * THE CELEBRATION, restored when the reads moved into the shared hook.
    *
-   * A THROTTLE IS NOT A VERDICT. GET /trust is rate-limited like the other public GETs now, and a
-   * 429 is JSON — so the old `.json()` handed `{error:'rate limited'}` to `ctaState`, which
-   * correctly refuses to recognise it and returns `unverified`. The result was that hitting our own
-   * rate limit made the page stop showing the real, verified contract and tell visitors it could
-   * not confirm one: the funnel disowning its own mint because it polled too fast. On a throttle we
-   * back off and CHANGE NOTHING — the last answer the verifier actually gave stands until it gives
-   * another. Every other failure still lands on `unverified`, which is the honest fail-closed state
-   * for "we could not ask".
+   * useNpcBoard reports which quests completed while somebody was WATCHING (it deliberately does
+   * not fire for quests already finished before the first read — that would be a burst of
+   * congratulations for things the player did days ago). Deciding what to DO about it is this
+   * page's, because the float and her line are this page's.
    */
   useEffect(() => {
-    if (!API) return;
-    const load = async () => {
-      const r = await readJson<unknown>(API + '/trust', { headers: { accept: 'application/json' } });
-      if (!r.ok && r.throttled) { backOff(r.retryAfterMs); return; }
-      const st = ctaState(r.ok ? r.data : null);
-      setCta(st);
-      setCaText(caLabel(st));
-    };
-    load();
-    const id = setInterval(() => { if (!throttledNow()) load(); }, 60000);
-    return () => clearInterval(id);
-  }, [throttledNow, backOff]);
+    if (!justCompleted.length) return;
+    floatUp(typeof window !== 'undefined' ? window.innerWidth / 2 : 200, 220, '✨ QUEST DONE');
+    for (const id of justCompleted) {
+      if (QUEST_LINE[id]) { setLine(QUEST_LINE[id]); setDim(false); break; }
+    }
+  }, [justCompleted, floatUp]);
 
-  /**
-   * Copy the verified mint — and say "copied" only when the clipboard actually took it.
-   *
-   * Both failure paths used to be silent. `navigator.clipboard` is undefined on a non-secure origin
-   * and in several mobile in-app browsers, where the optional chain made the write a no-op; and a
-   * rejected `writeText` — a denied clipboard permission, a call outside a user gesture — was
-   * swallowed by an empty `.catch`. The header said "copied ✅" in both cases, so the user pasted
-   * into a swap and got whatever was on their clipboard before, which on a memecoin buyer's
-   * clipboard is very often another token address somebody sent them. Everything else on this page
-   * refuses to state an outcome it did not verify; this is the same rule applied to the clipboard.
-   *
-   * On failure it prints the FULL mint rather than an apology, so the address can still be selected
-   * by hand — and it does not auto-revert, because a message you need to read and copy from must not
-   * disappear after a second and a half.
-   */
-  const copyCa = async () => {
-    const mint = cta && cta.cta ? cta.cta.mint : '';
-    const short = cta && cta.cta ? cta.cta.short : '';
-    if (!mint) {
-      setCaText('no verified contract to copy — beware impostors');
-      setTimeout(() => setCaText(caLabel(cta)), 2000);
-      return;
-    }
-    try {
-      if (typeof navigator === 'undefined' || !navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
-        throw new Error('no clipboard api');
-      }
-      await navigator.clipboard.writeText(mint);
-    } catch {
-      setCaText('could not copy — the address is ' + mint);
-      return;
-    }
-    setCaText('copied ✅ ' + short);
-    setTimeout(() => setCaText(caLabel(cta)), 1500);
-  };
+  // The leaderboard and the quest board are read by useNpcBoard, which shares this page's
+  // throttle brake and is the same implementation the avatar-screen panel renders.
+
+  // The CTA — and its rule that a THROTTLE IS NOT A VERDICT — is useNpcBoard's now.
+
+  // copyCa — including the rule that a 'could not copy' message must NOT auto-revert, because
+  // a line you have to read the address out of cannot disappear — is useNpcBoard's now.
 
   const connect = async () => {
     const p = provider();
@@ -296,7 +215,7 @@ export default function GamePage() {
     }
     setWalletMsg('✅ ' + shortAddr(w) + ' connected'
       + (claimed > 0 ? ' · claimed ' + claimed.toLocaleString() + ' taps' : session ? '' : ' · guest taps not claimed'));
-    drawQuests();
+    refreshQuests();
   };
 
   /**
