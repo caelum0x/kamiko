@@ -216,6 +216,22 @@ describe('tapping actually wakes her', () => {
     expect(index).not.toMatch(/bubbleMessage/);
   });
 
+  it('nothing asks for a capitalised "Neutral" — it silently disables her blinking', () => {
+    /*
+     * expressionController.playEmotion's neutral reset is guarded by `preset == "neutral"`, an
+     * exact lowercase comparison, and every path past that guard calls _autoBlink.setEnable(false).
+     * amicaLife.wakeFromSleep passed "Neutral", so waking her — which the tap path now does — left
+     * her not blinking, which reads as the avatar having frozen.
+     */
+    // withoutComments, NOT codeOnly: this asserts something about a STRING LITERAL, and codeOnly
+    // blanks those out — under it the regex can never match and the check is decorative. The rule
+    // learned twice in this file: codeOnly proves an identifier is USED; withoutComments proves
+    // something about the text of a literal.
+    for (const file of ['src/features/amicaLife/amicaLife.ts', 'src/features/amicaLife/eventHandler.ts', 'src/pages/index.tsx']) {
+      expect(withoutComments(read(file))).not.toMatch(/playEmotion\(\s*["'`]Neutral["'`]/);
+    }
+  });
+
   it('the panel does not write her face while the chat is speaking', () => {
     // processSpeakJobs sets the expression for the sentence she is delivering. Overwriting it
     // because the meter crossed a band is the panel talking over her.
