@@ -18,7 +18,7 @@ async function getResponseStream(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${apiKey}`,
-    "HTTP-Referer": "https://amica.arbius.ai",
+    "HTTP-Referer": "https://kamiko.fun",
     "X-Title": "Amica",
   };
 

@@ -33,14 +33,10 @@ export const Introduction = ({ open }: {
             {t("Setup")}
           </div>
           <p>{t('amica_setup', `
-            Click on the top left of the screen to open settings.
-            
-            You can change the voice, character system prompt, share/load/save and attach to different backends or in-browser models. 
-            
-            Please check our docs for more detailed configuration instructions on docs.heyamica.com
+            Tap the character to wake her. Open the stats panel from the HUD to track your taps, streak, and quests.
+
+            Her full AI voice chat and on-chain tipping unlock at launch.
           `)}
-          {' '}
-          <a href="https://docs.heyamica.com" target="_blank" className="text-cyan-500">{t("Read the full documentation here.")}</a>
           </p>
         </div>
 

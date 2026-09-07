@@ -13,7 +13,7 @@ export async function getOpenRouterChatResponseStream(messages: Message[]): Prom
 
   const baseUrl = config('openrouter_url') ?? 'https://openrouter.ai/api/v1';
   const model = config('openrouter_model') ?? 'openai/gpt-3.5-turbo';
-  const appUrl = 'https://amica.arbius.ai';
+  const appUrl = 'https://kamiko.fun';
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',

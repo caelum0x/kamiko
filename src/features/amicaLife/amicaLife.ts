@@ -155,7 +155,7 @@ export class AmicaLife {
 
     this.isProcessingIdleRunning = true;
 
-    console.log("Starting Amica Life");
+    console.log("Starting Kamiko Life");
     while (config("amica_life_enabled") === "true") {
       // Check if amica is in idle state trigger processingEvent loop
       if (!this.chat?.isAwake()) {
@@ -260,12 +260,12 @@ export class AmicaLife {
   // Function to pause the processingEvent loop is pauseFlag is true/false
   private async checkPause() {
     if (this.isPause) {
-      console.log("Amica Life Paused");
+      console.log("Kamiko Life Paused");
       await new Promise<void>((resolve) => {
         const checkPause = setInterval(() => {
           if (!this.isPause) {
             clearInterval(checkPause);
-            resolve(console.log("Amica Life Initiated"));
+            resolve(console.log("Kamiko Life Initiated"));
           }
         }, 50);
       });

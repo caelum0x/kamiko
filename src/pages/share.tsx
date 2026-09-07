@@ -631,11 +631,11 @@ export default function Share() {
                 {t("Or, you can share this direct link:")}
                 {' '}
                 <Link
-                  href={`https://amica.arbius.ai/import/${sqid}`}
+                  href={`/import/${sqid}`}
                   target={isTauri() ? "_blank" : ''}
                   className="text-cyan-600 hover:text-cyan-700"
                 >
-                  https://amica.arbius.ai/import/{sqid}
+                  /import/{sqid}
                 </Link>
               </p>
 

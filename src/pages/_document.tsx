@@ -5,9 +5,10 @@ import { GoogleAnalytics } from '@next/third-parties/google';
 import Script from 'next/script'
 
 export default function Document() {
-  const title = "Amica - Where Empathy Meets AI";
-  const description = "Amica is your personal 3D companion that can communicate via natural voice chat and vision, with an emotion engine that allows Amica to express feelings, complete tasks and engage on her own.";
-  const imageUrl = "https://amica.arbius.ai/ogp.png";
+  const title = "$KAMIKO — the anime VTuber who woke up inside a Solana memecoin";
+  const description = "Kamiko is a live 3D anime-girl AI VTuber reacting to the Solana market in real time — emotion, motion, voice, and vision rendered right in your browser. Tap to wake her. Not launched yet — no official contract exists.";
+  const imageUrl = "/ogp.png";
+  const appName = "$KAMIKO";
 
   return (
     <Html lang="en">
@@ -26,8 +27,8 @@ export default function Document() {
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
         <link rel="manifest" href="/site.webmanifest" />
         <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5" />
-        <meta name="apple-mobile-web-app-title" content={title} />
-        <meta name="application-name" content={title} />
+        <meta name="apple-mobile-web-app-title" content={appName} />
+        <meta name="application-name" content={appName} />
         <meta name="msapplication-TileColor" content="#da532c" />
         <meta name="theme-color" content="#ffffff" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

@@ -51,8 +51,8 @@ export function AddToHomescreen() {
               <div className="p-4">
                 <div className="flex items-start">
                   <div className="ml-3 w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900">{t("add_to_homescreen", "Add Amica to Homescreen")}</p>
-                    <p className="mt-1 text-sm text-gray-500">{t("add_to_homescreen_desc", "Amica can be installed locally for faster loading and less UI clutter.")}</p>
+                    <p className="text-sm font-medium text-gray-900">{t("add_to_homescreen", "Add $KAMIKO to Homescreen")}</p>
+                    <p className="mt-1 text-sm text-gray-500">{t("add_to_homescreen_desc", "Kamiko can be installed locally for faster loading and less UI clutter.")}</p>
                     <div className="mt-4 flex">
                       <button
                         type="button"

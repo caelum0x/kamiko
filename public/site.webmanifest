@@ -1,6 +1,6 @@
 {
-    "name": "Amica",
-    "short_name": "Amica",
+    "name": "$KAMIKO",
+    "short_name": "KAMIKO",
     "icons": [
         {
             "src": "/android-chrome-192x192.png",

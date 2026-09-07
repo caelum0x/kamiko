@@ -44,7 +44,7 @@ export function CommunityPage() {
         </li>
         <li className="py-4">
           <a
-            href="https://docs.heyamica.com"
+            href="https://kamiko.fun"
             target="_blank"
             className="rounded bg-emerald-600 px-2 py-1 text-lg font-semibold text-white shadow-sm hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
             >
