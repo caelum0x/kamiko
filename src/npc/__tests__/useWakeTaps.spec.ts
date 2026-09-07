@@ -189,3 +189,58 @@ describe('crossedMilestone — when the server has something new to say', () => 
     expect([...GREETING_MILESTONES]).toEqual([10, 100, 1000]);
   });
 });
+
+/**
+ * The tier logic of services/game-api/greetings.ts, mirrored here because apps/vtuber-amica is a
+ * separate npm app and cannot import across the bun workspace boundary. It is the SHAPE that
+ * matters — stable within a tier, different across one — not the wording.
+ */
+function greetingForLike(g: { taps: number; streak: number; bestStreak: number; returning: boolean }): string {
+  const pick = (list: string[], seed: number) => list[Math.abs(Math.floor(seed)) % list.length]!;
+  const { taps, streak } = g;
+  if (!g.returning && taps === 0) return pick(['new-a', 'new-b', 'new-c'], taps + 1);
+  if (streak >= 7) return pick([`day ${streak} staff`, `${streak} days straight`], streak);
+  if (streak >= 3) return pick([`again day ${streak}`, `day ${streak} remember`], streak + taps);
+  if (streak === 2) return pick(['back to back', 'twice now'], taps);
+  if (taps >= 1000) return pick([`${taps} deep`, '1k club'], taps);
+  if (taps >= 100) return pick(['the persistent one', 'back for more'], taps);
+  if (taps >= 10) return pick(['your rhythm', 'you again hi'], taps);
+  return pick(['back so soon', 'oh you'], taps + 1);
+}
+
+describe('a greeting is said once, not on every poll', () => {
+  /**
+   * The engine polls /me on a timer and /me returns a greeting every time. On /game that was
+   * harmless — it set a line. On the avatar screen the greeting is SPOKEN, so re-delivering it made
+   * her talk to herself twice a minute, unprompted, with a TTS request behind each one.
+   *
+   * The dedupe lives inside the hook's effect, which needs React to exercise. What is asserted here
+   * is the PROPERTY the dedupe relies on: that greetingFor is stable within a tier and changes
+   * across one. If that stopped being true, deduping on text would either mute her forever or stop
+   * suppressing anything, and both failures are silent.
+   */
+  const sameTier = { taps: 150, streak: 1, bestStreak: 1, returning: true };
+
+  it('is stable for an unchanged standing, so text is a sound key', () => {
+    const first = greetingForLike(sameTier);
+    for (let i = 0; i < 20; i++) expect(greetingForLike(sameTier)).toBe(first);
+  });
+
+  it('changes when the player crosses a milestone, so a new line still gets through', () => {
+    const before = greetingForLike({ taps: 99, streak: 1, bestStreak: 1, returning: true });
+    const after = greetingForLike({ taps: 100, streak: 1, bestStreak: 1, returning: true });
+    expect(after).not.toBe(before);
+  });
+
+  it('the milestones the engine watches are the ones that change the line', () => {
+    for (const m of GREETING_MILESTONES) {
+      const below = greetingForLike({ taps: m - 1, streak: 1, bestStreak: 1, returning: true });
+      const at = greetingForLike({ taps: m, streak: 1, bestStreak: 1, returning: true });
+      // jest's expect takes no message argument, so the reason is folded into the compared value.
+      const verdict = at !== below
+        ? 'changes'
+        : `crossing ${m} did not change the greeting, so the extra /me read that milestone triggers buys nothing`;
+      expect(verdict).toBe('changes');
+    }
+  });
+});

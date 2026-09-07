@@ -260,6 +260,9 @@ export function useWakeTaps(options: WakeTapsOptions = {}): WakeTaps {
    */
   const readMeRef = useRef<() => void>(() => {});
 
+  /** The last greeting handed to the host, so a poll cannot re-deliver one she already said. */
+  const lastGreeting = useRef<string | null>(null);
+
   useEffect(() => {
     deviceRef.current = deviceId();
     setDevice(deviceRef.current);
@@ -432,8 +435,24 @@ export function useWakeTaps(options: WakeTapsOptions = {}): WakeTaps {
       const j = r.data;
       applyStreak(j.streak, j.bestStreak);
       if (j.level) setLevel(j.level);
-      // A greeting for somebody the server has never seen is not a greeting.
-      if (j.greeting && ((j.taps ?? 0) > 0 || (j.bestStreak ?? 0) > 0)) greetingRef.current?.(j.greeting);
+      /*
+       * DELIVERED ONLY WHEN IT CHANGES, and this is not a nicety.
+       *
+       * /me is polled on a timer, and it returns a greeting every time. On /game that was harmless
+       * — it set a line. On the avatar screen the greeting is SPOKEN, so delivering it on every
+       * poll makes her talk to herself twice a minute, unprompted, forever, with a TTS request
+       * behind each one. Routing this to speech turned a harmless repeat into a bill and a tic.
+       *
+       * Text is the right key: greetingFor picks from a fixed pool with a seed derived from taps
+       * and streak, so within a tier the same sentence comes back every time, and it changes
+       * exactly when the player's standing does — which is the only moment worth saying it again.
+       */
+      const greeting = j.greeting;
+      const worthSaying = greeting && ((j.taps ?? 0) > 0 || (j.bestStreak ?? 0) > 0);
+      if (worthSaying && greeting !== lastGreeting.current) {
+        lastGreeting.current = greeting;
+        greetingRef.current?.(greeting);
+      }
     };
 
     readMeRef.current = () => { void readMe(); };
