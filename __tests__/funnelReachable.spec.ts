@@ -46,6 +46,17 @@ function withoutComments(source: string): string {
  * assertion side instead: the checks below look for CODE-SHAPED uses of an identifier, which no
  * sentence produces.
  */
+/**
+ * Use THIS when the assertion is about the TEXT OF A LITERAL — a specific string the code passes.
+ *
+ * Named rather than left as a bare `withoutComments` call because the mistake below has been made
+ * three times in this file: reaching for `codeOnly` (which blanks every literal) and then matching
+ * on a literal, producing a regex that can never fire and a check that passes on sabotaged code.
+ * The two helpers answer different questions and the call site should say which one it is asking.
+ */
+const sourceKeepingLiterals = withoutComments;
+
+/** Use THIS when the assertion is about an IDENTIFIER being used in code, not about any text. */
 function codeOnly(source: string): string {
   return withoutComments(source)
     .replace(/`(?:[^`\\]|\\.)*`/g, '``')
@@ -228,8 +239,16 @@ describe('tapping actually wakes her', () => {
     // learned twice in this file: codeOnly proves an identifier is USED; withoutComments proves
     // something about the text of a literal.
     for (const file of ['src/features/amicaLife/amicaLife.ts', 'src/features/amicaLife/eventHandler.ts', 'src/pages/index.tsx']) {
-      expect(withoutComments(read(file))).not.toMatch(/playEmotion\(\s*["'`]Neutral["'`]/);
+      expect(sourceKeepingLiterals(read(file))).not.toMatch(/playEmotion\(\s*["'`]Neutral["'`]/);
     }
+  });
+
+  it('the panel can wake her but may not put her to sleep', () => {
+    // A 'Sleep' mood is a fact about the CLICKER's meter, not about her. Writing it is the mirror
+    // of the closing-wakes-her bug: open the panel while she is awake and mid-conversation, the
+    // meter starts at zero, and the first mood effect paints her asleep. Whether she is asleep is
+    // amicaLife's call, from the idle timer.
+    expect(sourceKeepingLiterals(read('src/pages/index.tsx'))).toMatch(/mood === 'Sleep'\)\s*return/);
   });
 
   it('the panel does not write her face while the chat is speaking', () => {

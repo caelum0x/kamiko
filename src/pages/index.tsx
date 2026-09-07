@@ -670,11 +670,21 @@ export default function Home() {
               // from the screenplay for the sentence she is delivering; overwriting it mid-word
               // because the meter crossed a band is the panel talking over her.
               if (chatSpeaking) return;
+              /*
+               * THE PANEL CAN WAKE HER. IT MAY NOT PUT HER TO SLEEP.
+               *
+               * A 'Sleep' mood only means the CLICKER's meter is low, which is a fact about the
+               * game and not about her. Writing it was the mirror of the bug where closing the
+               * panel woke her: open the clicker while she is awake and mid-conversation, the meter
+               * starts at zero, and the first mood effect painted her asleep. Whether she is asleep
+               * is amicaLife's call, made from the idle timer, and the emoji on the panel is where
+               * the meter gets to have its say.
+               */
+              if (mood === 'Sleep') return;
               // wakeFromSleep() FIRST, and it matters: it ends amicaLife's sleep state AND writes
-              // "Neutral" itself, so doing it after playEmotion would immediately overwrite the
-              // mood we just set. Only on a waking mood — a `Sleep` mood is agreement, not a
-              // conflict, and forcing her awake to render "asleep" is nonsense.
-              if (mood !== 'Sleep') {
+              // the neutral reset itself, so doing it after playEmotion would immediately overwrite
+              // the mood we just set.
+              {
                 // THE CANONICAL SEQUENCE, copied from amicaLife.checkSettingOff — the repo's own
                 // answer to "the user came back". wakeFromSleep() alone is not waking her:
                 // handleSleepEvent PAUSED the loop on the way in (amicaLife.pause()), and clearing
