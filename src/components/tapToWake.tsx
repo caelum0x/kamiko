@@ -29,6 +29,20 @@ interface Float {
 
 export interface TapToWakeProps {
   /**
+   * Open the full `/game` dashboard.
+   *
+   * THE PANEL IS NOT THE WHOLE GAME, and the button that used to reach the rest of it is now this
+   * panel's toggle. Without a way forward from here, `/game` — the leaderboard, quests, the CTA,
+   * the wallet handshake and the streak saver — goes back to being the direct-link-only orphan
+   * index.tsx's own comment describes it having been. Somebody tapping is exactly the person who
+   * wants the leaderboard.
+   *
+   * A callback rather than an <a href> or window.open: index.tsx routes with `router.push`, which
+   * applies next.config.js's basePath. window.open takes a raw URL and does not, so on a BASE_PATH
+   * deployment a hardcoded link here would 404.
+   */
+  openDashboard: () => void;
+  /**
    * Say a line as HER: through TTS and the VRM expression, not as page text.
    *
    * Optional on purpose — the panel is still a working clicker without a speak path, and a missing
@@ -38,7 +52,7 @@ export interface TapToWakeProps {
   onClose: () => void;
 }
 
-export function TapToWake({ speak, onClose }: TapToWakeProps) {
+export function TapToWake({ speak, openDashboard, onClose }: TapToWakeProps) {
   const [line, setLine] = useState<string | null>(null);
   const [floats, setFloats] = useState<Float[]>([]);
   const seq = useRef(0);
@@ -118,6 +132,14 @@ export function TapToWake({ speak, onClose }: TapToWakeProps) {
       {streak ? <div className="mt-1 text-xs opacity-70">streak: {streak.streak}d (best {streak.best})</div> : null}
 
       {line ? <p className="mt-2 border-t border-white/15 pt-2 text-xs italic opacity-80">{line}</p> : null}
+
+      {/* The way forward. See `openDashboard` above for why this is a callback and not a link. */}
+      <button
+        onClick={openDashboard}
+        className="mt-3 w-full rounded-lg border border-white/20 py-1.5 text-xs opacity-80 hover:opacity-100"
+      >
+        leaderboard, quests &amp; rewards →
+      </button>
     </div>
   );
 }

@@ -622,7 +622,13 @@ export default function Home() {
         model reload costs seconds and would make the panel feel like a page navigation, which is
         the thing it exists to stop being.
       */}
-      {showTapToWake && <TapToWake speak={speakAsHer} onClose={() => setShowTapToWake(false)} />}
+      {showTapToWake && (
+        <TapToWake
+          speak={speakAsHer}
+          openDashboard={() => router.push("/game")}
+          onClose={() => setShowTapToWake(false)}
+        />
+      )}
 
       {/* Normal chat text */}
       {!showSubconciousText && ! showChatLog && ! showChatMode && (
