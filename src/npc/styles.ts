@@ -48,7 +48,7 @@ export const NPC_CSS = `
 .npcg-quest{margin-bottom:8px}.npcg-quest.done{opacity:.7}
 .npcg-quest-top{display:flex;justify-content:space-between;font-size:12px}
 .npcg-quest-bar{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin:4px 0}.npcg-quest-bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--violet),var(--neon))}
-.npcg-links{display:flex;justify-content:center;gap:16px;margin-top:16px;font-size:12px}.npcg-links a{color:var(--dim);text-decoration:none;display:inline-flex;align-items:center;gap:5px}.npcg-links a:hover{color:var(--ink)}
+.npcg-links{display:flex;justify-content:center;gap:16px;margin-top:16px;font-size:12px}.npcg-links a,.npcg-links button{color:var(--dim);text-decoration:none;display:inline-flex;align-items:center;gap:5px;background:none;border:0;padding:0;font:inherit;cursor:pointer}.npcg-links a:hover,.npcg-links button:hover{color:var(--ink)}
 .npcg-fine{margin-top:24px;text-align:center;font-size:10px;line-height:1.6;color:var(--dim)}
 /* ---- holder dashboard ---- */
 .npcg-input{width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:10px 12px;font:inherit;font-size:13px}

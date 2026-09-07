@@ -3,7 +3,6 @@ import {
   useEffect,
   useState,
 } from "react";
-import { useRouter } from "next/router";
 import { clsx } from "clsx";
 import { M_PLUS_2, Montserrat } from "next/font/google";
 
@@ -46,7 +45,6 @@ const montserrat = Montserrat({
 });
 
 export default function Home() {
-  const router = useRouter();
   const { viewer } = useContext(ViewerContext);
   const { alert } = useContext(AlertContext);
   const { chat: bot } = useContext(ChatContext);
@@ -130,6 +128,8 @@ export default function Home() {
           </span>
         </div>
 
+        {/* Single-page experience: this button only toggles the on-page stats/quests panel — it
+            never routes to another page. There are no route-changing links anywhere on the stage. */}
         <nav className="pointer-events-auto flex items-center gap-2.5 font-mono text-[13px] text-white/55 sm:text-sm">
           <button
             onClick={() => setGameOpen((o) => !o)}
@@ -139,20 +139,6 @@ export default function Home() {
             )}
           >
             game
-          </button>
-          <span className="text-white/20">·</span>
-          <button
-            onClick={() => router.push("/holder")}
-            className="rounded px-1 py-0.5 tracking-tight transition-colors hover:text-[#00ffa3]"
-          >
-            holder
-          </button>
-          <span className="text-white/20">·</span>
-          <button
-            onClick={() => router.push("/trust")}
-            className="rounded px-1 py-0.5 tracking-tight transition-colors hover:text-[#00ffa3]"
-          >
-            trust
           </button>
         </nav>
       </div>

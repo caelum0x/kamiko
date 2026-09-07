@@ -8,8 +8,8 @@
  */
 import type { WakeGame } from './useWakeGame.ts';
 import {
-  BellIcon, BotIcon, ChartIcon, CheckIcon, FlameIcon, GemIcon, GiftIcon,
-  LinkIcon, MicIcon, ShareIcon, ShieldIcon,
+  BellIcon, ChartIcon, CheckIcon, FlameIcon, GiftIcon,
+  LinkIcon, MicIcon, ShareIcon,
 } from './icons.tsx';
 import { shortAddr } from './identity.ts';
 
@@ -71,11 +71,11 @@ export function WakeGamePanel({ game, onClose }: WakeGamePanelProps) {
           {quests?.list.map((q) => <QuestRow key={q.id} {...q} />)}
         </Panel>
 
+        {/* Single-page: "Talk to her" just returns to the stage where the live chat lives — it does
+            NOT navigate to another route. Holder/tips (Connect Phantom below) and trust (the CTA /
+            notice above) are folded into THIS panel, so there are no route-changing links. */}
         <div className="npcg-links">
-          <a href="/"><MicIcon /> Talk to her</a>
-          <a href="/holder"><GemIcon /> Holder</a>
-          <a href="/trust"><ShieldIcon /> Trust</a>
-          <a href="/agents"><BotIcon /> Agents</a>
+          <button type="button" onClick={onClose}><MicIcon /> Talk to her</button>
         </div>
 
         <button onClick={connect} className="npcg-btn"><LinkIcon /> {wallet ? shortAddr(wallet) : 'Connect Phantom'}</button>
