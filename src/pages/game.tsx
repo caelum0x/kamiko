@@ -32,6 +32,10 @@ import {
 import { caLabel, ctaState, type CtaState } from '../npc/cta.ts';
 import { hasSubscription, pushOfferable, subscribeToStreakSaver } from '../npc/push.ts';
 import { NPC_CSS } from '../npc/styles.ts';
+import {
+  BellIcon, BotIcon, ChartIcon, CheckIcon, FlameIcon, GemIcon, GiftIcon,
+  LinkIcon, MicIcon, NpcFace, ShareIcon, ShieldIcon,
+} from '../npc/icons.tsx';
 
 /* ------------------------------------------------------------------ *
  * Her voice.
@@ -60,7 +64,6 @@ const UNSENT_KEY = 'npc_unsent';
 const MAX_CARRIED_TAPS = 10_000;
 
 const pick = (pool: string[]) => pool[Math.floor(Math.random() * pool.length)];
-const faceFor = (a: number) => (a < 15 ? '😐' : a < 50 ? '😳' : a < 85 ? '🤯' : '😈');
 
 interface Quest { id: string; label: string; progress: number; goal: number; done: boolean; reward: string }
 interface Daily { label: string; progress: number; goal: number; done: boolean; reward: string }
@@ -320,7 +323,7 @@ export default function GamePage() {
     for (const q of j.quests as Quest[]) {
       if (q.done && !doneQuests.current.has(q.id)) {
         if (seenQuests.current) {
-          floatUp(typeof window !== 'undefined' ? window.innerWidth / 2 : 200, 220, '✨ QUEST DONE');
+          floatUp(typeof window !== 'undefined' ? window.innerWidth / 2 : 200, 220, 'QUEST DONE');
           if (QUEST_LINE[q.id]) { setLine(QUEST_LINE[q.id]); setDim(false); }
         }
         doneQuests.current.add(q.id);
@@ -402,7 +405,7 @@ export default function GamePage() {
       setCaText('could not copy — the address is ' + mint);
       return;
     }
-    setCaText('copied ✅ ' + short);
+    setCaText('copied · ' + short);
     setTimeout(() => setCaText(caLabel(cta)), 1500);
   };
 
@@ -434,7 +437,7 @@ export default function GamePage() {
         claimed = Number(c?.claimed) || 0;
       } catch { /* connect stands; the claim is retried on the next connect */ }
     }
-    setWalletMsg('✅ ' + shortAddr(w) + ' connected'
+    setWalletMsg(shortAddr(w) + ' connected'
       + (claimed > 0 ? ' · claimed ' + claimed.toLocaleString() + ' taps' : session ? '' : ' · guest taps not claimed'));
     drawQuests();
   };
@@ -453,7 +456,7 @@ export default function GamePage() {
     const r = await subscribeToStreakSaver({ wallet: live.current.wallet, device: device.current });
     if (r.ok) {
       setPushArmed(true);
-      setPushMsg(r.alreadySubscribed ? "✅ still armed — she'll nudge you before your streak lapses." : "✅ armed. she'll nudge you before your streak lapses.");
+      setPushMsg(r.alreadySubscribed ? "still armed — she'll nudge you before your streak lapses." : "armed. she'll nudge you before your streak lapses.");
     } else {
       setPushMsg(r.why);
     }
@@ -461,7 +464,7 @@ export default function GamePage() {
 
   const share = () => {
     const landing = API + '/s?' + idFor();
-    const text = `i've woken the NPC ${taps.toLocaleString()} times and she's losing it. tap to wake her too 👇`;
+    const text = `i've woken the NPC ${taps.toLocaleString()} times and she's losing it. tap to wake her too:`;
     const intent = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(landing);
     if (typeof navigator !== 'undefined' && (navigator as any).share) (navigator as any).share({ title: '$NPC', text, url: landing }).catch(() => window.open(intent, '_blank'));
     else window.open(intent, '_blank');
@@ -490,8 +493,8 @@ export default function GamePage() {
             onClick={(e) => tap(e.clientX, e.clientY)}
             onTouchStart={(e) => { e.preventDefault(); const t = e.touches[0]; tap(t?.clientX ?? 200, t?.clientY ?? 300); }}
             aria-label="tap to wake her"
-          >{faceFor(awake)}</button>
-          {coach && <div className="npcg-coach"><b>TAP TO WAKE HER 👆</b><div>she's asleep inside the market. keep tapping.</div></div>}
+          ><NpcFace awake={awake} /></button>
+          {coach && <div className="npcg-coach"><b>TAP TO WAKE HER</b><div>she's asleep inside the market. keep tapping.</div></div>}
           <div className="npcg-bar-row"><span>AWAKENESS</span><span>{Math.floor(awake)}%</span></div>
           <div className="npcg-bar"><span style={{ width: awake + '%' }} /></div>
         </div>
@@ -501,21 +504,21 @@ export default function GamePage() {
           <Stat k="GLOBAL WAKES" v={global === null ? '…' : Math.floor(global).toLocaleString()} />
           <div className="npcg-card npcg-span">
             <div className="npcg-k">DAILY STREAK</div>
-            <div className={'npcg-v' + (streak ? ' neon' : '')}>{streak ? `🔥 ${streak.streak} ${streak.streak === 1 ? 'day' : 'days'}${streak.best > streak.streak ? ' · best ' + streak.best : ''}` : '— come back daily'}</div>
+            <div className={'npcg-v' + (streak ? ' neon' : '')}>{streak ? <><FlameIcon /> {streak.streak} {streak.streak === 1 ? 'day' : 'days'}{streak.best > streak.streak ? ' · best ' + streak.best : ''}</> : '— come back daily'}</div>
           </div>
         </div>
 
         {cta && cta.cta && (
           <div className="npcg-cta-row">
             <a className="npcg-buy" href={cta.cta.buy} target="_blank" rel="noopener noreferrer">BUY $NPC</a>
-            <a className="npcg-chart" href={cta.cta.chart} target="_blank" rel="noopener noreferrer">📈 CHART</a>
+            <a className="npcg-chart" href={cta.cta.chart} target="_blank" rel="noopener noreferrer"><ChartIcon /> CHART</a>
           </div>
         )}
         {cta && cta.state !== 'live' && (
           <div className={'npcg-notice ' + cta.state}><b>{cta.title}</b> {cta.detail}</div>
         )}
 
-        <button onClick={share} className="npcg-btn">📣 Share my wakes</button>
+        <button onClick={share} className="npcg-btn"><ShareIcon /> Share my wakes</button>
 
         <Panel title="Top Wakers">
           {rows === null ? <div className="npcg-muted">leaderboard unavailable — the api did not answer</div>
@@ -529,24 +532,24 @@ export default function GamePage() {
         </Panel>
 
         <Panel title={quests ? `Quests · ${quests.done}/${quests.total}` : 'Quests'}>
-          {quests?.daily && <QuestRow {...quests.daily} label={'☀️ ' + quests.daily.label} />}
+          {quests?.daily && <QuestRow {...quests.daily} label={quests.daily.label} daily />}
           {quests?.list.map((q) => <QuestRow key={q.id} {...q} />)}
         </Panel>
 
         <div className="npcg-links">
-          <a href="/">🎤 Talk to her</a>
-          <a href="/holder">💠 Holder</a>
-          <a href="/trust">🛡️ Trust</a>
-          <a href="/agents">🤖 Agents</a>
+          <a href="/"><MicIcon /> Talk to her</a>
+          <a href="/holder"><GemIcon /> Holder</a>
+          <a href="/trust"><ShieldIcon /> Trust</a>
+          <a href="/agents"><BotIcon /> Agents</a>
         </div>
 
-        <button onClick={connect} className="npcg-btn">{wallet ? '🔗 ' + shortAddr(wallet) : '🔗 Connect Phantom'}</button>
+        <button onClick={connect} className="npcg-btn"><LinkIcon /> {wallet ? shortAddr(wallet) : 'Connect Phantom'}</button>
         <div className="npcg-muted npcg-center">{walletMsg}</div>
 
         {pushOffer && (
           <>
             <button onClick={armStreakSaver} disabled={pushArmed} className="npcg-btn">
-              {pushArmed ? '🔔 Streak saver armed' : '🔔 Remind me before my streak dies'}
+              <BellIcon /> {pushArmed ? 'Streak saver armed' : 'Remind me before my streak dies'}
             </button>
             <div className="npcg-muted npcg-center">{pushMsg}</div>
           </>
@@ -566,13 +569,13 @@ function Stat({ k, v, neon, sub }: { k: string; v: string; neon?: boolean; sub?:
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return <div className="npcg-panel"><h3>{title}</h3>{children}</div>;
 }
-function QuestRow({ label, progress, goal, done, reward }: { label: string; progress: number; goal: number; done: boolean; reward: string }) {
+function QuestRow({ label, progress, goal, done, reward, daily }: { label: string; progress: number; goal: number; done: boolean; reward: string; daily?: boolean }) {
   const pct = Math.min(100, Math.round((100 * progress) / goal));
   return (
     <div className={'npcg-quest' + (done ? ' done' : '')}>
-      <div className="npcg-quest-top"><span>{label}</span><span>{done ? '✅' : `${progress}/${goal}`}</span></div>
+      <div className="npcg-quest-top"><span>{daily ? <span className="npcg-daily">DAILY</span> : null}{label}</span><span>{done ? <CheckIcon /> : `${progress}/${goal}`}</span></div>
       <div className="npcg-quest-bar"><span style={{ width: pct + '%' }} /></div>
-      <div className="npcg-sub">{done ? '🎁 ' + reward : reward}</div>
+      <div className="npcg-sub">{done ? <><GiftIcon /> {reward}</> : reward}</div>
     </div>
   );
 }
