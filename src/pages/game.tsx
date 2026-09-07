@@ -22,12 +22,12 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
-import { createQueue } from '../utils/airiQueue.ts'; // merged from airi (packages/stream-kit)
+import { useWakeTaps } from '../npc/useWakeTaps.ts';
 
-import { API, MAX_BACKOFF_MS, apiDeadline, readJson } from '../npc/config.ts';
+import { API, apiDeadline, readJson } from '../npc/config.ts';
 import {
-  TZ, connectWallet, deviceId, provider, questId, readLocal, removeLocal,
-  sessionHeaders, shortAddr, walletId, writeLocal,
+  TZ, connectWallet, provider, questId, readLocal,
+  sessionHeaders, shortAddr, writeLocal,
 } from '../npc/identity.ts';
 import { caLabel, ctaState, type CtaState } from '../npc/cta.ts';
 import { hasSubscription, pushOfferable, subscribeToStreakSaver } from '../npc/push.ts';
@@ -49,78 +49,54 @@ const QUEST_LINE: Record<string, string> = {
   streak30: 'thirty days. i wait for you now.', invite3: 'you brought friends. she noticed.',
   connect: "oh you're REAL real now.", tip: "you tipped me. i'll remember that. literally.",
 };
-/**
- * Taps counted locally that /wake has not accepted yet, parked across a page unload.
- *
- * The cap is not a storage concern — it is a ceiling on what one restore may add to the global
- * counter. Anything larger than this is a corrupted or hand-edited value, and honouring it would
- * let a client inflate the one number on this page that is supposed to be the server's.
- */
-const UNSENT_KEY = 'npc_unsent';
-const MAX_CARRIED_TAPS = 10_000;
-
 const pick = (pool: string[]) => pool[Math.floor(Math.random() * pool.length)];
 const faceFor = (a: number) => (a < 15 ? '😐' : a < 50 ? '😳' : a < 85 ? '🤯' : '😈');
 
 interface Quest { id: string; label: string; progress: number; goal: number; done: boolean; reward: string }
 interface Daily { label: string; progress: number; goal: number; done: boolean; reward: string }
-interface Level { level: number; title: string; tapsToNext: number | null; nextTitle?: string }
 interface Float { id: number; x: number; y: number; text: string }
 
 export default function GamePage() {
-  const saved = (() => { try { return JSON.parse(readLocal('npc') || '{}') as { taps?: number; awake?: number }; } catch { return {}; } })();
-
-  const [taps, setTaps] = useState(saved.taps || 0);
-  const [awake, setAwake] = useState(saved.awake || 0);
-  const [global, setGlobal] = useState<number | null>(null);
   const [line, setLine] = useState('// booting…');
   const [dim, setDim] = useState(true);
   const [coach, setCoach] = useState(!readLocal('npc_onboarded'));
   const [board, setBoard] = useState<{ rows: [string, number][] | null }>({ rows: null });
   const [quests, setQuests] = useState<{ list: Quest[]; done: number; total: number; daily: Daily | null } | null>(null);
-  const [level, setLevel] = useState<Level | null>(null);
-  const [streak, setStreak] = useState<{ streak: number; best: number } | null>(null);
   const [cta, setCta] = useState<CtaState | null>(null);
   const [caText, setCaText] = useState('CA: unverified');
-  const [wallet, setWallet] = useState('');
   const [walletMsg, setWalletMsg] = useState('');
   const [floats, setFloats] = useState<Float[]>([]);
-  const [ready, setReady] = useState(false);
   const [pushOffer, setPushOffer] = useState(false);
   const [pushArmed, setPushArmed] = useState(false);
   const [pushMsg, setPushMsg] = useState('');
 
-  const device = useRef('');
-  /**
-   * Epoch ms until which every polled read is skipped, set from a 429's Retry-After.
-   * A ref, not state: the poll callbacks read it on every tick and a re-render per throttle would
-   * be pure noise on a page that is already animating.
-   */
-  const backoffUntil = useRef(0);
-  const pending = useRef(0);
-  const ref = useRef('');
   const floatSeq = useRef(0);
   const seenQuests = useRef(false);
   const doneQuests = useRef(new Set<string>());
+
+  /**
+   * THE TAP ENGINE, SHARED WITH THE AVATAR SCREEN.
+   *
+   * Everything this page used to do inline — the local tap/awake counting and its persistence, the
+   * carried-taps recovery, the batched /wake flush with its referral and 429 rules, the shared
+   * throttle brake, and the /stats + /me reads — now lives in src/npc/useWakeTaps.ts, unchanged in
+   * behaviour, so `/` can mount the same loop over the VRM stage. Two copies of THIS loop would be
+   * two copies of the bugs its comments describe, which is the same argument src/npc/ exists for.
+   *
+   * What stayed here is presentation and the dashboard: her idle chatter, the floats, the coach
+   * mark, the leaderboard, quests, the CTA, the wallet handshake and the push offer.
+   */
+  const onGreeting = useCallback((text: string) => { setLine(text); setDim(true); }, []);
+  const engine = useWakeTaps({ onGreeting });
+  const { ready, taps, awake, global, streak, level, throttledNow, backOff, device, wallet, setWallet } = engine;
+
+  /** Mirrors the values the callbacks below read on every tick without re-subscribing. */
   const live = useRef({ taps, awake, wallet, global });
   live.current = { taps, awake, wallet, global };
 
-  // localStorage is client-only (Next.js SSR): resolve identity after mount.
+  // Identity, the carried-taps recovery and `ready` are the engine's (useWakeTaps). What is left
+  // here is the push offer, which is this page's alone.
   useEffect(() => {
-    device.current = deviceId();
-    setWallet(walletId());
-    ref.current = new URLSearchParams(location.search).get('ref') || '';
-    /*
-     * Taps this browser counted locally and never got accepted by /wake, carried over from a
-     * previous visit (see the flush loop's cleanup). Read ONCE and erased immediately: the value is
-     * re-written on the next unmount, and a key that survived a restore would be restored again
-     * after any crash that skipped the unmount — turning a recovery into an inflation of the one
-     * number this page promises is real.
-     */
-    const carried = Math.max(0, Math.min(MAX_CARRIED_TAPS, Math.floor(Number(readLocal(UNSENT_KEY)) || 0)));
-    removeLocal(UNSENT_KEY);
-    if (carried > 0) pending.current += carried;
-    setReady(true);
     // Whether the streak saver can be OFFERED at all is a client-side question (browser support, a
     // configured VAPID key, permission not already denied). Asking for permission is not: that
     // happens on the button, never on load, because an unprompted permission dialog is penalised by
@@ -129,14 +105,7 @@ export default function GamePage() {
     hasSubscription().then(setPushArmed).catch(() => setPushArmed(false));
   }, []);
 
-  /** Are we inside a backoff window the server asked for? */
-  const throttledNow = useCallback(() => Date.now() < backoffUntil.current, []);
-  /** Park every polled read until `ms` from now (never shortens an existing, longer window). */
-  const backOff = useCallback((ms: number) => {
-    backoffUntil.current = Math.max(backoffUntil.current, Date.now() + ms);
-  }, []);
-
-  const idFor = useCallback(() => questId(live.current.wallet, device.current), []);
+  const idFor = useCallback(() => questId(live.current.wallet, device), [device]);
 
   const floatUp = useCallback((x: number, y: number, text: string) => {
     const id = ++floatSeq.current;
@@ -151,123 +120,28 @@ export default function GamePage() {
   }, []);
 
   const tap = useCallback((x: number, y: number) => {
-    pending.current += 1;
-    setTaps((t) => {
-      const next = t + 1;
-      if (next === 1) { setCoach(false); writeLocal('npc_onboarded', '1'); }
-      if (next % 5 === 0) voice();
-      return next;
-    });
-    setAwake((a) => Math.min(100, a + (a > 90 ? 0.3 : 1.4)));
-    setGlobal((g) => (g === null ? g : g + 1));
+    // The count, the wake curve, the optimistic global and the flush are the engine's. This page
+    // adds what only it renders: the coach mark it dismisses on the first tap, the drifting +1, and
+    // her idle chatter every fifth tap.
+    const next = live.current.taps + 1;
+    engine.tap();
+    if (next === 1) { setCoach(false); writeLocal('npc_onboarded', '1'); }
+    if (next % 5 === 0) voice();
     floatUp(x, y, '+1');
-  }, [voice, floatUp]);
+  }, [engine, voice, floatUp]);
 
-  useEffect(() => { writeLocal('npc', JSON.stringify({ taps, awake })); }, [taps, awake]);
-
+  // Her LOCAL chatter. The idle decay lives in the engine; this interval is only the line she says
+  // between server greetings, which /me overwrites through onGreeting when it has a real one.
   useEffect(() => {
-    const decay = setInterval(() => { if (live.current.taps < 5) return; setAwake((a) => Math.max(0, a - 0.4)); }, 1500);
     const chatter = setInterval(voice, 4200);
     voice();
-    return () => { clearInterval(decay); clearInterval(chatter); };
+    return () => clearInterval(chatter);
   }, [voice]);
 
-  const applyStreak = useCallback((s?: number, best?: number) => {
-    if (typeof s !== 'number' || !s) return;
-    setStreak({ streak: s, best: best || s });
-  }, []);
-
-  // Flush taps to /wake — through airi's stream-kit queue (merged into amica). The queue drains one
-  // batch at a time, so two /wake POSTs can never overlap and race on the once-only ?ref attribution
-  // the way a bare setInterval(fetch) could when a request outran the 2s tick.
-  //
-  // Two rules this loop got wrong and now gets right, both of them about what a FAILED send means:
-  //
-  //   - THE REFERRAL IS CLEARED ONLY BY AN ANSWER. `ref.current = ''` used to run the instant the
-  //     fetch resolved — before `r.ok` was looked at and before the body was read — so any 429, 500
-  //     or bridge 502 permanently destroyed the `?ref=` that brought this player in. The referral is
-  //     attributed once, ever, server-side; losing it here loses the invite quest and the growth
-  //     funnel with no retry and no sign anything happened.
-  //   - A FAILED BATCH IS RETRIED, NOT COUNTED. The error handler used to ADD the batch to the
-  //     global counter, on top of the optimistic +1 `tap()` already applied — inflating the one
-  //     number this page promises is real or absent. The taps go back on the pending pile instead,
-  //     so the next tick resends them and the authoritative `globalWakes` in that answer corrects
-  //     the optimistic local count.
-  //
-  //   - A 429 IS OBEYED, NOT FOUGHT. npc-api rate-limits /wake (120/min), and a throttled batch is
-  //     still `!r.ok`, so retrying it on the normal 2s tick is a client answering its own rate
-  //     limit by spending the rest of its budget on the request that was already refused. The
-  //     batch goes back on the pile AND the shared brake is set from Retry-After, which is the
-  //     same brake the read loops honour — one throttle parks every call this page makes, because
-  //     they all share one bucket per client.
-  //
-  // npc-api clamps a single /wake to 100 taps, so a backlog is sent in 100-tap batches rather than
-  // one oversized post the server would silently truncate.
-  useEffect(() => {
-    if (!ready || !API) return;
-    const q = createQueue<number>({
-      handlers: [async ({ data: n }) => {
-        const sentRef = ref.current;
-        const r = await fetch(API + '/wake', {
-          method: 'POST', headers: { 'content-type': 'application/json' }, signal: apiDeadline(),
-          body: JSON.stringify({ taps: n, wallet: live.current.wallet || undefined, device: device.current, tz: TZ, ref: sentRef || undefined }),
-        });
-        if (r.status === 429) {
-          // Read the server's own wait before throwing, so the brake is set from what it asked for
-          // rather than from a guess. The throw is what puts the taps back on the pile.
-          const header = Number(r.headers.get('retry-after'));
-          let seconds = Number.isFinite(header) && header > 0 ? header : 0;
-          if (!seconds) {
-            try {
-              const body = (await r.json()) as { retryAfterSec?: unknown };
-              const b = Number(body?.retryAfterSec);
-              if (Number.isFinite(b) && b > 0) seconds = b;
-            } catch { /* no readable body — the floor below applies */ }
-          }
-          backOff(Math.min(MAX_BACKOFF_MS, Math.max(1000, seconds * 1000)));
-          throw new Error('/wake throttled');
-        }
-        // Throw so the queue's `error` event runs and the taps (and the ref) survive.
-        if (!r.ok) throw new Error('/wake answered HTTP ' + r.status);
-        const j = await r.json();
-        // The api has now seen this ref exactly once — attributed or rejected, either way it is spent.
-        if (sentRef) ref.current = '';
-        if (typeof j.globalWakes === 'number') setGlobal(j.globalWakes);
-        applyStreak(j.streak, j.bestStreak);
-      }],
-    });
-    q.on('error', (n) => { pending.current += n as number; });
-    const id = setInterval(() => {
-      // Nothing is sent while the server has asked us to wait — the taps keep accumulating in
-      // `pending` and go out in one batch when the window expires, which is also fewer requests.
-      if (throttledNow() || pending.current <= 0) return;
-      const n = Math.min(100, pending.current);
-      pending.current -= n;
-      q.enqueue(n);
-    }, 2000);
-    return () => {
-      clearInterval(id);
-      /*
-       * Anything still queued was taken off `pending`, so put it back before the queue is dropped:
-       * an unmount mid-flush must not silently lose taps the player made.
-       *
-       * `clear()` now RETURNS those batches (src/utils/airiQueue.ts — a local divergence from
-       * upstream airi, documented there). Before that it returned void and emitted nothing, and the
-       * `error` handler above — the only path that restores a batch — fires from `drain`'s catch,
-       * which a cleared item never reaches. So this comment promised a recovery the code could not
-       * perform, and the observable damage was the locally persisted tap count permanently exceeding
-       * the server's, which is what the spliced-in "YOU" leaderboard row is computed from.
-       *
-       * `pending` is a component ref and dies with the unmount, so the restored total is also
-       * written to storage for the next visit to resend. What is NOT recoverable is a batch already
-       * in flight: it is neither in the queue nor in `pending`, and the server may well have
-       * accepted it — putting that one back would double-count it, which is the wrong direction to
-       * be wrong on the number this page promises is real.
-       */
-      for (const n of q.clear()) pending.current += n;
-      if (pending.current > 0) writeLocal(UNSENT_KEY, String(Math.min(MAX_CARRIED_TAPS, pending.current)));
-    };
-  }, [ready, applyStreak, throttledNow, backOff]);
+  // The /wake flush loop — batching, the once-only ?ref attribution, the 429 brake and the
+  // unmount recovery — is src/npc/useWakeTaps.ts now, moved there verbatim so the avatar screen
+  // can run the same loop. Its rules and the failures that bought them are documented at the top
+  // of that file; they were not rewritten, they were relocated.
 
   /*
    * Reads: stats / leaderboard / me / quests, on load and on a slow poll.
@@ -278,7 +152,8 @@ export default function GamePage() {
    * loop `{error: 'rate limited'}` — the board rendered empty and the loop asked again 4 seconds
    * later, which is a page answering its own rate limit by hitting the limit harder.
    *
-   * `backoffUntil` is the shared brake: a throttle from ANY of these parks all of them, because
+   * The brake is SHARED WITH THE ENGINE (useWakeTaps owns it): a throttle from ANY call parks
+   * all of them, because
    * they share one bucket per client and racing to be the one that recovers first just spends the
    * budget on whichever loop is fastest.
    */
@@ -293,20 +168,8 @@ export default function GamePage() {
     setBoard({ rows: (r.data.leaderboard || []).map((x) => [x.wallet, x.count] as [string, number]) });
   }, [throttledNow, backOff]);
 
-  const loadMe = useCallback(async () => {
-    if (throttledNow()) return;
-    const r = await readJson<{ streak?: number; bestStreak?: number; level?: Level; greeting?: string; taps?: number }>(
-      API + '/me?' + idFor(),
-    );
-    if (!r.ok) {
-      if (r.throttled) backOff(r.retryAfterMs);
-      return; // leave her idle chatter
-    }
-    const j = r.data;
-    applyStreak(j.streak, j.bestStreak);
-    if (j.level) setLevel(j.level);
-    if (j.greeting && ((j.taps ?? 0) > 0 || (j.bestStreak ?? 0) > 0)) { setLine(j.greeting); setDim(true); }
-  }, [idFor, applyStreak, throttledNow, backOff]);
+  // /me — the streak, the level and her greeting — is read by the engine, which shares this page's
+  // throttle brake and hands the greeting back through `onGreeting` above.
 
   const drawQuests = useCallback(async () => {
     if (throttledNow()) return;
@@ -330,19 +193,16 @@ export default function GamePage() {
     setQuests({ list: j.quests, done: j.done, total: j.total, daily: j.daily || null });
   }, [idFor, floatUp, throttledNow, backOff]);
 
+  // The dashboard polls. /stats and /me are the engine's (it keeps the global counter honest —
+  // '…' until a real number lands — and hands her greeting back through onGreeting); what is left
+  // here is the leaderboard and the quest board, which only this page renders.
   useEffect(() => {
     if (!ready || !API) return;
-    (async () => {
-      const r = await readJson<{ globalWakes?: number }>(API + '/stats');
-      if (r.ok && typeof r.data.globalWakes === 'number') setGlobal(r.data.globalWakes);
-      else if (!r.ok && r.throttled) backOff(r.retryAfterMs);
-      // otherwise the counter stays '…' — it never shows a seeded number that later collapses
-    })();
-    drawBoard(); loadMe(); drawQuests();
+    drawBoard(); drawQuests();
     const b = setInterval(drawBoard, 4000);
     const q = setInterval(drawQuests, 6000);
     return () => { clearInterval(b); clearInterval(q); };
-  }, [ready, drawBoard, loadMe, drawQuests]);
+  }, [ready, drawBoard, drawQuests]);
 
   /*
    * The contract CTA, written by the verifier or not at all.
@@ -429,7 +289,7 @@ export default function GamePage() {
           method: 'POST',
           headers: { 'content-type': 'application/json', ...sessionHeaders(session) },
           signal: apiDeadline(),
-          body: JSON.stringify({ wallet: w, device: device.current }),
+          body: JSON.stringify({ wallet: w, device }),
         })).json();
         claimed = Number(c?.claimed) || 0;
       } catch { /* connect stands; the claim is retried on the next connect */ }
@@ -450,7 +310,7 @@ export default function GamePage() {
    */
   const armStreakSaver = async () => {
     setPushMsg('asking your browser…');
-    const r = await subscribeToStreakSaver({ wallet: live.current.wallet, device: device.current });
+    const r = await subscribeToStreakSaver({ wallet: live.current.wallet, device });
     if (r.ok) {
       setPushArmed(true);
       setPushMsg(r.alreadySubscribed ? "✅ still armed — she'll nudge you before your streak lapses." : "✅ armed. she'll nudge you before your streak lapses.");

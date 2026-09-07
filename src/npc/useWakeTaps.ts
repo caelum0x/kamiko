@@ -1,0 +1,360 @@
+/**
+ * useWakeTaps.ts — the tap engine, headless, so "tap to wake her" can run on the screen she is on.
+ *
+ * WHY THIS EXISTS.
+ * The clicker is called "tap to wake her" and, until this file, it ran on `/game` — a route that
+ * does not render the avatar at all (game.tsx imports no VrmViewer) and whose idea of her voice is
+ * three hardcoded string pools picked at random (SLEEPING / WAKING / HYPED). So the loop built to
+ * make people come back showed neither her face nor her actual brain, while both sat one
+ * navigation away on `/`. Tapping woke a counter.
+ *
+ * Moving the tap surface onto the avatar screen only works if there is ONE engine. game.tsx's flush
+ * loop is the part of this product that has been wrong the most times and is now right, and each of
+ * its rules was paid for:
+ *
+ *   - THE REFERRAL IS CLEARED ONLY BY AN ANSWER. `ref` used to be cleared the instant the fetch
+ *     resolved, before `r.ok` was read, so any 429 or bridge 502 permanently destroyed the `?ref=`
+ *     that brought the player in — attributed once, server-side, with no retry and no sign.
+ *   - A FAILED BATCH IS RETRIED, NOT COUNTED. The error path used to ADD the batch to the global
+ *     counter on top of the optimistic local +1, inflating the one number this product promises is
+ *     real. The taps go back on the pending pile instead.
+ *   - A 429 IS OBEYED, NOT FOUGHT. A throttled batch retried on the normal tick is a client
+ *     answering its own rate limit by spending the rest of its budget on the refused request.
+ *   - AN UNMOUNT MID-FLUSH LOSES NOTHING QUEUED, AND DOUBLE-COUNTS NOTHING IN FLIGHT. `clear()`
+ *     returns the queued batches (see src/utils/airiQueue.ts); a batch already sent is neither
+ *     restored nor re-counted, because the server may well have taken it.
+ *
+ * A second copy of that on the avatar screen would be a second set of those bugs. So the engine is
+ * here, both surfaces mount it, and the pages keep only their own presentation.
+ *
+ * WHAT IS DELIBERATELY NOT HERE: the leaderboard, quests, the CTA, the wallet handshake and the
+ * push offer. Those are the `/game` dashboard, not the tap loop, and the avatar overlay does not
+ * want them.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createQueue } from '../utils/airiQueue.ts';
+import { API, MAX_BACKOFF_MS, apiDeadline, readJson } from './config.ts';
+import { TZ, deviceId, questId, readLocal, removeLocal, walletId, writeLocal } from './identity.ts';
+
+/** Taps counted locally that /wake has not accepted yet, parked across a page unload. */
+export const UNSENT_KEY = 'npc_unsent';
+
+/**
+ * The ceiling on what ONE restore may add to the global counter. Not a storage concern: anything
+ * larger than this is a corrupted or hand-edited value, and honouring it would let a client inflate
+ * the one number on this product that is supposed to be the server's.
+ */
+export const MAX_CARRIED_TAPS = 10_000;
+
+/** npc-api clamps a single /wake to 100 taps, so a backlog goes out in batches this size. */
+export const WAKE_BATCH = 100;
+
+/** Where the local tap/awake pair is persisted between visits. */
+const LOCAL_KEY = 'npc';
+
+/* ------------------------------------------------------------------ *
+ * The pure parts, so the curve and the clamp are testable without React
+ * ------------------------------------------------------------------ */
+
+/**
+ * PURE. How far one tap moves the wake meter.
+ *
+ * Deliberately non-linear and capped at 100: the last stretch is slow so "fully awake" stays
+ * something a player arrives at rather than something two seconds of mashing produces.
+ */
+export function nextAwake(current: number): number {
+  const a = Number.isFinite(current) ? current : 0;
+  return Math.min(100, a + (a > 90 ? 0.3 : 1.4));
+}
+
+/** PURE. The idle decay applied on a tick once the player has actually started. */
+export function decayAwake(current: number): number {
+  const a = Number.isFinite(current) ? current : 0;
+  return Math.max(0, a - 0.4);
+}
+
+/**
+ * PURE. How many carried taps a restore may credit.
+ *
+ * Fails toward ZERO, never toward the stored number: a NaN, a negative, a fractional or an absurd
+ * value is somebody editing localStorage, and the honest answer to "how many taps did you make" is
+ * not "whatever you typed".
+ */
+export function carriedTaps(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(MAX_CARRIED_TAPS, Math.floor(n));
+}
+
+/** PURE. The wait a 429 asked for, in ms, floored so a hostile or missing value cannot mean "now". */
+export function backoffMsFor(retryAfterSeconds: unknown): number {
+  const s = Number(retryAfterSeconds);
+  const ms = Number.isFinite(s) && s > 0 ? s * 1000 : 0;
+  return Math.min(MAX_BACKOFF_MS, Math.max(1000, ms));
+}
+
+/* ------------------------------------------------------------------ *
+ * The hook
+ * ------------------------------------------------------------------ */
+
+export interface WakeStreak {
+  streak: number;
+  best: number;
+}
+
+/** The level /me reports. Rendered by the /game dashboard; the overlay does not use it. */
+export interface WakeLevel {
+  level: number;
+  title: string;
+  tapsToNext: number | null;
+  nextTitle?: string;
+}
+
+export interface WakeTaps {
+  /** False until identity has resolved after mount — localStorage is client-only under SSR. */
+  ready: boolean;
+  /** Lifetime taps this browser has counted, including ones not yet accepted. */
+  taps: number;
+  /** 0..100. How awake she is right now. */
+  awake: number;
+  /** The server's global wake count, or null until a real number lands — never a seeded value. */
+  global: number | null;
+  streak: WakeStreak | null;
+  level: WakeLevel | null;
+  /** Count one tap. Optimistic locally; the server's answer corrects the global. */
+  tap: () => void;
+  /** Are we inside a backoff window the server asked for? Shared brake for a host page's reads. */
+  throttledNow: () => boolean;
+  /** Park every call until `ms` from now (never shortens an existing, longer window). */
+  backOff: (ms: number) => void;
+  /** This browser's device id, resolved after mount. */
+  device: string;
+  /** The connected wallet, if the host page has one. */
+  wallet: string;
+  setWallet: (w: string) => void;
+}
+
+export interface WakeTapsOptions {
+  /**
+   * Called when the SERVER has something for her to say — currently /me's greeting, which is
+   * written by her brain rather than picked from a local pool. The avatar screen routes this into
+   * the real speak pipeline; /game renders it as a line.
+   *
+   * Only called when the player has a history (taps or a best streak), because the greeting for
+   * somebody the server has never seen is not a greeting.
+   */
+  onGreeting?: (line: string) => void;
+  /** Poll interval for /me, ms. */
+  meEveryMs?: number;
+}
+
+/**
+ * The tap loop: local counting, batched flushes to /wake, the shared throttle brake, and the
+ * carried-taps recovery across a page unload.
+ */
+export function useWakeTaps(options: WakeTapsOptions = {}): WakeTaps {
+  const { onGreeting, meEveryMs = 30_000 } = options;
+
+  const saved = (() => {
+    try {
+      return JSON.parse(readLocal(LOCAL_KEY) || '{}') as { taps?: number; awake?: number };
+    } catch {
+      return {};
+    }
+  })();
+
+  const [taps, setTaps] = useState(saved.taps || 0);
+  const [awake, setAwake] = useState(saved.awake || 0);
+  const [global, setGlobal] = useState<number | null>(null);
+  const [streak, setStreak] = useState<WakeStreak | null>(null);
+  const [level, setLevel] = useState<WakeLevel | null>(null);
+  const [ready, setReady] = useState(false);
+  const [device, setDevice] = useState('');
+  const [wallet, setWallet] = useState('');
+
+  /**
+   * Epoch ms until which every polled read is skipped. A ref, not state: the callbacks read it on
+   * every tick and a re-render per throttle would be pure noise on a screen that is animating.
+   */
+  const backoffUntil = useRef(0);
+  const pending = useRef(0);
+  const ref = useRef('');
+  const deviceRef = useRef('');
+  const live = useRef({ wallet, taps });
+  live.current = { wallet, taps };
+
+  /** Held in a ref so changing the callback cannot restart the flush loop mid-batch. */
+  const greetingRef = useRef(onGreeting);
+  greetingRef.current = onGreeting;
+
+  useEffect(() => {
+    deviceRef.current = deviceId();
+    setDevice(deviceRef.current);
+    setWallet(walletId());
+    ref.current = new URLSearchParams(location.search).get('ref') || '';
+    /*
+     * Taps this browser counted and never got accepted, carried from a previous visit. Read ONCE
+     * and erased immediately: the value is re-written on the next unmount, and a key that survived
+     * a restore would be restored again after any crash that skipped the unmount — turning a
+     * recovery into an inflation of the number this product promises is real.
+     */
+    const carried = carriedTaps(readLocal(UNSENT_KEY));
+    removeLocal(UNSENT_KEY);
+    if (carried > 0) pending.current += carried;
+    setReady(true);
+  }, []);
+
+  const throttledNow = useCallback(() => Date.now() < backoffUntil.current, []);
+  const backOff = useCallback((ms: number) => {
+    backoffUntil.current = Math.max(backoffUntil.current, Date.now() + ms);
+  }, []);
+
+  const tap = useCallback(() => {
+    pending.current += 1;
+    setTaps((t) => t + 1);
+    setAwake(nextAwake);
+    setGlobal((g) => (g === null ? g : g + 1));
+  }, []);
+
+  useEffect(() => {
+    writeLocal(LOCAL_KEY, JSON.stringify({ taps, awake }));
+  }, [taps, awake]);
+
+  // Idle decay, but only once the player has actually started: decaying from zero before the first
+  // tap would render a meter that is already falling on a screen nobody has touched.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (live.current.taps < 5) return;
+      setAwake(decayAwake);
+    }, 1500);
+    return () => clearInterval(id);
+  }, []);
+
+  const applyStreak = useCallback((s?: number, best?: number) => {
+    if (typeof s !== 'number' || !s) return;
+    setStreak({ streak: s, best: best || s });
+  }, []);
+
+  /*
+   * Flush taps to /wake through the stream-kit queue. The queue drains ONE batch at a time, so two
+   * /wake POSTs can never overlap and race on the once-only `?ref` attribution the way a bare
+   * setInterval(fetch) could when a request outran the tick.
+   */
+  useEffect(() => {
+    if (!ready || !API) return;
+    const q = createQueue<number>({
+      handlers: [
+        async ({ data: n }) => {
+          const sentRef = ref.current;
+          const r = await fetch(API + '/wake', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            signal: apiDeadline(),
+            body: JSON.stringify({
+              taps: n,
+              wallet: live.current.wallet || undefined,
+              device: deviceRef.current,
+              tz: TZ,
+              ref: sentRef || undefined,
+            }),
+          });
+          if (r.status === 429) {
+            // Read the server's own wait before throwing, so the brake is set from what it asked
+            // for rather than from a guess. The throw is what puts the taps back on the pile.
+            const header = Number(r.headers.get('retry-after'));
+            let seconds = Number.isFinite(header) && header > 0 ? header : 0;
+            if (!seconds) {
+              try {
+                const body = (await r.json()) as { retryAfterSec?: unknown };
+                const b = Number(body?.retryAfterSec);
+                if (Number.isFinite(b) && b > 0) seconds = b;
+              } catch {
+                /* no readable body — the floor in backoffMsFor applies */
+              }
+            }
+            backOff(backoffMsFor(seconds));
+            throw new Error('/wake throttled');
+          }
+          // Throw so the queue's `error` event runs and the taps (and the ref) survive.
+          if (!r.ok) throw new Error('/wake answered HTTP ' + r.status);
+          const j = (await r.json()) as { globalWakes?: number; streak?: number; bestStreak?: number };
+          // The api has now seen this ref exactly once — attributed or rejected, it is spent.
+          if (sentRef) ref.current = '';
+          if (typeof j.globalWakes === 'number') setGlobal(j.globalWakes);
+          applyStreak(j.streak, j.bestStreak);
+        },
+      ],
+    });
+    q.on('error', (n) => {
+      pending.current += n as number;
+    });
+    const id = setInterval(() => {
+      // Nothing is sent while the server has asked us to wait — the taps keep accumulating and go
+      // out in one batch when the window expires, which is also fewer requests.
+      if (throttledNow() || pending.current <= 0) return;
+      const n = Math.min(WAKE_BATCH, pending.current);
+      pending.current -= n;
+      q.enqueue(n);
+    }, 2000);
+    return () => {
+      clearInterval(id);
+      /*
+       * Anything still queued was taken off `pending`, so put it back before the queue is dropped.
+       * What is NOT recoverable is a batch already in flight: it is neither in the queue nor in
+       * `pending`, and the server may well have accepted it — restoring that one would double-count
+       * it, which is the wrong direction to be wrong on this number.
+       */
+      for (const n of q.clear()) pending.current += n;
+      if (pending.current > 0) writeLocal(UNSENT_KEY, String(Math.min(MAX_CARRIED_TAPS, pending.current)));
+    };
+  }, [ready, applyStreak, throttledNow, backOff]);
+
+  /*
+   * The global counter and her greeting. Both are reads, both honour the shared brake, and neither
+   * ever substitutes a local guess for a server number: the counter stays null until a real value
+   * lands, because a seeded number that later collapses is worse than a dash.
+   */
+  useEffect(() => {
+    if (!ready || !API) return;
+    let alive = true;
+
+    const readStats = async () => {
+      if (throttledNow()) return;
+      const r = await readJson<{ globalWakes?: number }>(API + '/stats');
+      if (!alive) return;
+      if (r.ok && typeof r.data.globalWakes === 'number') setGlobal(r.data.globalWakes);
+      else if (!r.ok && r.throttled) backOff(r.retryAfterMs);
+    };
+
+    const readMe = async () => {
+      if (throttledNow()) return;
+      // questId, not a second copy of the same ternary: /game builds its /me and /quests ids with
+      // it, and two spellings of 'who is this player' drift into two different players.
+      const id = questId(live.current.wallet, deviceRef.current);
+      const r = await readJson<{ streak?: number; bestStreak?: number; greeting?: string; taps?: number; level?: WakeLevel }>(`${API}/me?${id}`);
+      if (!alive) return;
+      if (!r.ok) {
+        if (r.throttled) backOff(r.retryAfterMs);
+        return;
+      }
+      const j = r.data;
+      applyStreak(j.streak, j.bestStreak);
+      if (j.level) setLevel(j.level);
+      // A greeting for somebody the server has never seen is not a greeting.
+      if (j.greeting && ((j.taps ?? 0) > 0 || (j.bestStreak ?? 0) > 0)) greetingRef.current?.(j.greeting);
+    };
+
+    void readStats();
+    void readMe();
+    const id = setInterval(() => {
+      void readStats();
+      void readMe();
+    }, meEveryMs);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [ready, applyStreak, throttledNow, backOff, meEveryMs]);
+
+  return { ready, taps, awake, global, streak, level, tap, throttledNow, backOff, device, wallet, setWallet };
+}

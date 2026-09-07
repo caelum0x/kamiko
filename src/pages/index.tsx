@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -54,6 +55,8 @@ import { Moshi } from "@/features/moshi/components/Moshi";
 import { ViewerContext } from "@/features/vrmViewer/viewerContext";
 import { Message, Role } from "@/features/chat/messages";
 import { ChatContext } from "@/features/chat/chatContext";
+import { textsToScreenplay } from "@/features/chat/messages";
+import { TapToWake } from "@/components/tapToWake";
 import { AlertContext } from "@/features/alert/alertContext";
 
 import { config, updateConfig } from '@/utils/config';
@@ -123,6 +126,33 @@ export default function Home() {
   const { viewer } = useContext(ViewerContext);
   const { alert } = useContext(AlertContext);
   const { chat: bot } = useContext(ChatContext);
+
+  /**
+   * SAY A LINE AS HER, not as page text.
+   *
+   * This is the whole reason the clicker moved onto this screen. `/game` answered a tap by calling
+   * setLine() with a string from a local pool — no voice, no expression, and no avatar on the page
+   * to wear one. Here the line goes through the SAME path a chat reply takes:
+   *   textsToScreenplay parses the `[emotion]` tag the bridge injects and produces the talk style;
+   *   ttsJobs carries it to fetchAudio, then speakJobs to viewer.model.speak, which is what moves
+   *   her face and mouth.
+   *
+   * `currentStreamIdx` is passed rather than a fresh number because chat.interrupt() bumps it to
+   * abandon in-flight speech — reusing it means a tap line is dropped by the same interrupt that
+   * drops a chat reply, instead of talking over her.
+   */
+  const speakAsHer = useCallback((line: string) => {
+    const text = String(line ?? "").trim();
+    if (!text) return;
+    try {
+      const [screenplay] = textsToScreenplay([text]);
+      if (!screenplay) return;
+      bot.ttsJobs.enqueue({ screenplay, streamIdx: bot.currentStreamIdx });
+    } catch (e) {
+      // A tap must never be able to take down the avatar screen. The panel still shows the line.
+      console.error("tap-to-wake could not speak the line", e);
+    }
+  }, [bot]);
   const { amicaLife: amicaLife } = useContext(AmicaLifeContext);
 
   const [chatSpeaking, setChatSpeaking] = useState(false);
@@ -145,6 +175,7 @@ export default function Home() {
   const [showChatMode, setShowChatMode] = useState(false);
   const [showSubconciousText, setShowSubconciousText] = useState(false);
   const [showMoshi, setShowMoshi] = useState(false);
+  const [showTapToWake, setShowTapToWake] = useState(false);
 
   // null indicates havent loaded config yet
   const [muted, setMuted] = useState<boolean|null>(null);
@@ -469,10 +500,18 @@ export default function Home() {
               window.open takes a raw URL and does NOT apply next.config.js's `basePath`, so on a
               BASE_PATH deployment every one of these would open a 404. The router applies it.
             */}
+            {/*
+              IT OPENS HERE NOW, instead of `router.push("/game")`.
+              The game is called "tap to wake her" and /game renders no avatar and speaks with a
+              local string pool, so the button built to drive retention navigated away from the one
+              thing this product is. The panel mounts over the stage and her line is spoken by the
+              real pipeline; /game stays exactly where it was for the full dashboard — leaderboard,
+              quests, the CTA, the wallet handshake — which does not belong on top of the stage.
+            */}
             <MenuButton
               large={isVRHeadset}
               icon={CursorArrowRaysIcon}
-              onClick={() => router.push("/game")}
+              onClick={() => setShowTapToWake((v) => !v)}
               label="tap to wake her"
             />
             <MenuButton
@@ -576,6 +615,14 @@ export default function Home() {
       </div>
 
       {showChatLog && <ChatLog messages={chatLog} />}
+
+      {/*
+        The clicker, over the stage rather than instead of it. It is deliberately mounted here —
+        after VrmViewer and outside the settings tree — so opening it never unmounts the VRM: the
+        model reload costs seconds and would make the panel feel like a page navigation, which is
+        the thing it exists to stop being.
+      */}
+      {showTapToWake && <TapToWake speak={speakAsHer} onClose={() => setShowTapToWake(false)} />}
 
       {/* Normal chat text */}
       {!showSubconciousText && ! showChatLog && ! showChatMode && (
