@@ -9,11 +9,14 @@
  */
 import { describe, expect, it } from '@jest/globals';
 import {
+  GREETING_MILESTONES,
   MAX_CARRIED_TAPS,
   WAKE_BATCH,
   backoffMsFor,
   carriedTaps,
+  crossedMilestone,
   decayAwake,
+  moodFor,
   nextAwake,
 } from '../useWakeTaps.ts';
 import { MAX_BACKOFF_MS } from '../config.ts';
@@ -119,5 +122,70 @@ describe('the batch size matches what npc-api will accept', () => {
     // batch would quietly DROP taps the player made and the local count would drift above the
     // server's forever.
     expect(WAKE_BATCH).toBe(100);
+  });
+});
+
+describe('moodFor — what waking her actually looks like', () => {
+  it('is asleep below the first threshold, which is the state the game exists to end', () => {
+    expect(moodFor(0)).toBe('Sleep');
+    expect(moodFor(14.9)).toBe('Sleep');
+  });
+
+  it('climbs through the meter and lands on happy', () => {
+    expect(moodFor(15)).toBe('neutral');
+    expect(moodFor(49.9)).toBe('neutral');
+    expect(moodFor(50)).toBe('Surprised');
+    expect(moodFor(84.9)).toBe('Surprised');
+    expect(moodFor(85)).toBe('happy');
+    expect(moodFor(100)).toBe('happy');
+  });
+
+  it('uses the SAME thresholds as the emoji face on the /game dashboard', () => {
+    // 15 / 50 / 85 are game.tsx's faceFor cut-points. If these two drift, the emoji says she is
+    // wide awake while the avatar is still asleep, on the same number, in the same product.
+    const boundaries = [15, 50, 85];
+    for (const b of boundaries) expect(moodFor(b - 0.1)).not.toBe(moodFor(b));
+  });
+
+  it('never returns undefined for a corrupted meter', () => {
+    // `awake` is restored from localStorage, and an undefined expression reaches playEmotion.
+    expect(moodFor(Number.NaN)).toBe('Sleep');
+    expect(moodFor(-50)).toBe('Sleep');
+    expect(moodFor(1e9)).toBe('happy');
+  });
+});
+
+describe('crossedMilestone — when the server has something new to say', () => {
+  it('fires exactly on the tap that crosses', () => {
+    expect(crossedMilestone(9, 10)).toBe(true);
+    expect(crossedMilestone(99, 100)).toBe(true);
+    expect(crossedMilestone(999, 1000)).toBe(true);
+  });
+
+  it('does not fire on the taps around it, so one crossing is one request', () => {
+    expect(crossedMilestone(10, 11)).toBe(false);
+    expect(crossedMilestone(100, 101)).toBe(false);
+    expect(crossedMilestone(50, 51)).toBe(false);
+  });
+
+  it('catches a JUMP, not just an increment', () => {
+    // A restored backlog or a fast tapper between renders moves the counter by more than one. An
+    // `=== 100` test would miss every player who was ever offline mid-run, and they would never
+    // hear the line written for them.
+    expect(crossedMilestone(0, 250)).toBe(true);
+    expect(crossedMilestone(98, 1200)).toBe(true);
+  });
+
+  it('never fires backwards or on a standstill', () => {
+    expect(crossedMilestone(100, 100)).toBe(false);
+    expect(crossedMilestone(200, 100)).toBe(false);
+    expect(crossedMilestone(Number.NaN, 100)).toBe(false);
+  });
+
+  it('matches the tiers services/game-api greetingFor actually branches on', () => {
+    // The coupling is the whole point: greetingFor() changes what she says at 10, 100 and 1000
+    // lifetime taps. A milestone the server does not branch on spends a request to hear the same
+    // sentence; a tier it branches on that is missing here is a line the player never hears.
+    expect([...GREETING_MILESTONES]).toEqual([10, 100, 1000]);
   });
 });

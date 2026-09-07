@@ -625,6 +625,12 @@ export default function Home() {
       {showTapToWake && (
         <TapToWake
           speak={speakAsHer}
+          setMood={(mood) => {
+            // playEmotion drives the FACE and the body's idle mood together (model.ts) with no
+            // audio, so this is what waking her actually looks like. Guarded: the VRM may still be
+            // loading, and a tap before it lands must not throw on the stage.
+            try { bot.viewer?.model?.playEmotion(mood); } catch { /* the model is not up yet */ }
+          }}
           openDashboard={() => router.push("/game")}
           onClose={() => setShowTapToWake(false)}
         />

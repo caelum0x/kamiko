@@ -18,7 +18,7 @@
  * loop and nothing else, so the avatar keeps the screen.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useWakeTaps } from '@/npc/useWakeTaps';
+import { useWakeTaps, type WakeMood } from '@/npc/useWakeTaps';
 
 /** One drifting "+1" over the point that was tapped. */
 interface Float {
@@ -43,6 +43,14 @@ export interface TapToWakeProps {
    */
   openDashboard: () => void;
   /**
+   * Put her FACE in a mood, with no audio.
+   *
+   * This is what makes waking her legible instead of numeric: without it, tapping moved a bar and
+   * she sat there neutral. Optional like `speak` — the panel is a working clicker on a page with no
+   * avatar, and a missing viewer must never crash the stage.
+   */
+  setMood?: (mood: WakeMood) => void;
+  /**
    * Say a line as HER: through TTS and the VRM expression, not as page text.
    *
    * Optional on purpose — the panel is still a working clicker without a speak path, and a missing
@@ -52,7 +60,7 @@ export interface TapToWakeProps {
   onClose: () => void;
 }
 
-export function TapToWake({ speak, openDashboard, onClose }: TapToWakeProps) {
+export function TapToWake({ speak, setMood, openDashboard, onClose }: TapToWakeProps) {
   const [line, setLine] = useState<string | null>(null);
   const [floats, setFloats] = useState<Float[]>([]);
   const seq = useRef(0);
@@ -72,7 +80,24 @@ export function TapToWake({ speak, openDashboard, onClose }: TapToWakeProps) {
     speakRef.current?.(text);
   }, []);
 
-  const { taps, awake, global, streak, tap } = useWakeTaps({ onGreeting });
+  const { taps, awake, global, streak, mood, tap } = useWakeTaps({ onGreeting });
+
+  /**
+   * Drive her expression from the meter — ONLY WHEN IT CHANGES.
+   *
+   * playEmotion restarts the emote controller and the procedural idle mood, so calling it on every
+   * tap would retrigger the animation dozens of times a second and she would twitch rather than
+   * wake. The effect's dependency is the mood, not `awake`, which is what makes that true.
+   */
+  const setMoodRef = useRef(setMood);
+  setMoodRef.current = setMood;
+  useEffect(() => {
+    setMoodRef.current?.(mood);
+  }, [mood]);
+
+  // She returns to neutral when the panel closes: leaving her stuck mid-'happy' after the game is
+  // put away is the avatar wearing an expression nothing on screen explains.
+  useEffect(() => () => setMoodRef.current?.('neutral'), []);
 
   const onTap = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {

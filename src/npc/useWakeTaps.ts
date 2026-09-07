@@ -86,6 +86,56 @@ export function carriedTaps(raw: unknown): number {
   return Math.min(MAX_CARRIED_TAPS, Math.floor(n));
 }
 
+/**
+ * The VRM expression names this engine uses. A subset of `emotions` in
+ * src/features/chat/messages.ts, kept as a plain union so this module — which the /game dashboard
+ * imports and which must not drag in the chat/VRM tree — stays dependency-free.
+ */
+export type WakeMood = 'Sleep' | 'neutral' | 'Surprised' | 'happy';
+
+/**
+ * PURE. What her FACE does as the meter moves.
+ *
+ * This is the thing that was missing from "tap to wake her": tapping changed a number and she did
+ * not react at all. Her expression is what makes waking her legible — and the thresholds are the
+ * SAME 15/50/85 the emoji face uses on the /game dashboard, so the emoji and the avatar can never
+ * disagree about how awake she is.
+ *
+ * `Sleep` is a real VRM expression, not "neutral with the lights off": below the first threshold
+ * she is asleep, which is the state the whole game exists to end.
+ */
+export function moodFor(awake: number): WakeMood {
+  const a = Number.isFinite(awake) ? awake : 0;
+  if (a < 15) return 'Sleep';
+  if (a < 50) return 'neutral';
+  if (a < 85) return 'Surprised';
+  return 'happy';
+}
+
+/**
+ * Tap counts at which the SERVER has a different thing to say.
+ *
+ * These are not decorative: services/game-api/greetings.ts's greetingFor() branches on exactly
+ * 10, 100 and 1000 lifetime taps, so crossing one is the only moment a re-read of /me produces a
+ * genuinely new line. Any other number would spend a request to hear the same sentence.
+ *
+ * KEEPING THEM IN STEP IS THE POINT. If greetingFor gains a tier, it belongs here too — otherwise
+ * she reaches it silently and the player never hears the line that was written for them.
+ */
+export const GREETING_MILESTONES = [10, 100, 1000] as const;
+
+/**
+ * PURE. Did going from `before` to `after` taps cross a milestone?
+ *
+ * Takes both ends rather than testing equality on the new value, so a batch that jumps the counter
+ * (a restored backlog, or a fast tapper between renders) still counts as having crossed it. An
+ * `=== 100` test silently misses every player who was ever offline mid-run.
+ */
+export function crossedMilestone(before: number, after: number): boolean {
+  if (!Number.isFinite(before) || !Number.isFinite(after) || after <= before) return false;
+  return GREETING_MILESTONES.some((m) => before < m && after >= m);
+}
+
 /** PURE. The wait a 429 asked for, in ms, floored so a hostile or missing value cannot mean "now". */
 export function backoffMsFor(retryAfterSeconds: unknown): number {
   const s = Number(retryAfterSeconds);
@@ -121,6 +171,8 @@ export interface WakeTaps {
   global: number | null;
   streak: WakeStreak | null;
   level: WakeLevel | null;
+  /** Her current expression, derived from `awake`. See moodFor. */
+  mood: WakeMood;
   /** Count one tap. Optimistic locally; the server's answer corrects the global. */
   tap: () => void;
   /** Are we inside a backoff window the server asked for? Shared brake for a host page's reads. */
@@ -187,6 +239,15 @@ export function useWakeTaps(options: WakeTapsOptions = {}): WakeTaps {
   const greetingRef = useRef(onGreeting);
   greetingRef.current = onGreeting;
 
+  /**
+   * The /me read, reachable from the tap handler.
+   *
+   * A milestone is the only moment a re-read says anything new (see GREETING_MILESTONES), and it
+   * has to be triggered from `tap` — waiting for the 30s poll means she congratulates you on your
+   * hundredth tap up to half a minute after you made it, which reads as her not having noticed.
+   */
+  const readMeRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     deviceRef.current = deviceId();
     setDevice(deviceRef.current);
@@ -211,7 +272,14 @@ export function useWakeTaps(options: WakeTapsOptions = {}): WakeTaps {
 
   const tap = useCallback(() => {
     pending.current += 1;
-    setTaps((t) => t + 1);
+    setTaps((t) => {
+      const next = t + 1;
+      // Crossing a milestone is the one moment the server has a NEW line for this player, so it is
+      // read now rather than on the next poll. Outside a setState updater this would read a `taps`
+      // captured at render time and miss the crossing entirely on a fast tapper.
+      if (crossedMilestone(t, next)) readMeRef.current();
+      return next;
+    });
     setAwake(nextAwake);
     setGlobal((g) => (g === null ? g : g + 1));
   }, []);
@@ -344,6 +412,7 @@ export function useWakeTaps(options: WakeTapsOptions = {}): WakeTaps {
       if (j.greeting && ((j.taps ?? 0) > 0 || (j.bestStreak ?? 0) > 0)) greetingRef.current?.(j.greeting);
     };
 
+    readMeRef.current = () => { void readMe(); };
     void readStats();
     void readMe();
     const id = setInterval(() => {
@@ -356,5 +425,5 @@ export function useWakeTaps(options: WakeTapsOptions = {}): WakeTaps {
     };
   }, [ready, applyStreak, throttledNow, backOff, meEveryMs]);
 
-  return { ready, taps, awake, global, streak, level, tap, throttledNow, backOff, device, wallet, setWallet };
+  return { ready, taps, awake, global, streak, level, mood: moodFor(awake), tap, throttledNow, backOff, device, wallet, setWallet };
 }
