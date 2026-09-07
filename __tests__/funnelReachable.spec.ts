@@ -134,3 +134,48 @@ describe('a surface that talks to nothing says so', () => {
     expect(read('src/npc/useWakeTaps.ts')).toMatch(/configured:\s*Boolean\(API\)/);
   });
 });
+
+/**
+ * THE VERB HAS TO BE TRUE.
+ *
+ * The clicker is called "tap to wake her". Her wakefulness is not the panel's meter — it is
+ * chat.lastAwake and amicaLife.isSleep, and amicaLife is enabled by default (config.ts:
+ * amica_life_enabled defaults to 'true'), puts her to `Sleep` on idle and pauses itself. Nothing
+ * outside amicaLife has ever called wakeFromSleep(), so a player could fill the bar to 100% while
+ * she stayed asleep in the system that decides whether she idles, animates and speaks on her own,
+ * with the panel painting `happy` over a sleeping face and the two states never reconciling.
+ *
+ * These assert the wiring exists at all. They are source scans for the same reason the rest of this
+ * file is: mounting index.tsx means mounting three.js.
+ */
+describe('tapping actually wakes her', () => {
+  const index = codeOnly(read('src/pages/index.tsx'));
+  const panel = codeOnly(read('src/components/tapToWake.tsx'));
+
+  it('every tap tells chat she is awake', () => {
+    // chat.lastAwake is what isAwake() reads; without this the idle timer never resets and she is
+    // "idle" while somebody is actively tapping her.
+    expect(panel).toMatch(/onTap/);
+    expect(index).toMatch(/updateAwake\(\)/);
+  });
+
+  it('a waking mood ends amicaLife sleep, so the face and the state agree', () => {
+    expect(index).toMatch(/wakeFromSleep\(\)/);
+  });
+
+  it('wakeFromSleep runs BEFORE playEmotion, or the mood is immediately overwritten', () => {
+    // wakeFromSleep() writes "Neutral" itself (amicaLife.ts). Called after playEmotion it would
+    // undo the mood on every single crossing, which looks exactly like the feature not working.
+    const wake = index.indexOf('wakeFromSleep()');
+    const play = index.indexOf('playEmotion(mood)');
+    expect(wake).toBeGreaterThan(-1);
+    expect(play).toBeGreaterThan(-1);
+    expect(wake).toBeLessThan(play);
+  });
+
+  it('the panel does not write her face while the chat is speaking', () => {
+    // processSpeakJobs sets the expression for the sentence she is delivering. Overwriting it
+    // because the meter crossed a band is the panel talking over her.
+    expect(index).toMatch(/chatSpeaking/);
+  });
+});

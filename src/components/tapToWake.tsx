@@ -51,6 +51,16 @@ export interface TapToWakeProps {
    */
   setMood?: (mood: WakeMood) => void;
   /**
+   * Called on EVERY tap, before anything else.
+   *
+   * This is the signal that makes the game's verb true. The avatar's wakefulness is owned by
+   * amicaLife and chat.lastAwake, not by this meter — so without this the player taps, the bar
+   * fills, and the system that decides whether she idles, animates and speaks on her own has heard
+   * nothing. Separate from `setMood` because it must fire on every tap, not only when the meter
+   * crosses a band.
+   */
+  onTap?: () => void;
+  /**
    * Say a line as HER: through TTS and the VRM expression, not as page text.
    *
    * Optional on purpose — the panel is still a working clicker without a speak path, and a missing
@@ -60,7 +70,7 @@ export interface TapToWakeProps {
   onClose: () => void;
 }
 
-export function TapToWake({ speak, setMood, openDashboard, onClose }: TapToWakeProps) {
+export function TapToWake({ speak, setMood, onTap: onTapSignal, openDashboard, onClose }: TapToWakeProps) {
   const [line, setLine] = useState<string | null>(null);
   const [floats, setFloats] = useState<Float[]>([]);
   const seq = useRef(0);
@@ -99,9 +109,13 @@ export function TapToWake({ speak, setMood, openDashboard, onClose }: TapToWakeP
   // put away is the avatar wearing an expression nothing on screen explains.
   useEffect(() => () => setMoodRef.current?.('neutral'), []);
 
+  const tapSignalRef = useRef(onTapSignal);
+  tapSignalRef.current = onTapSignal;
+
   const onTap = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       tap();
+      tapSignalRef.current?.();
       const rect = e.currentTarget.getBoundingClientRect();
       const id = ++seq.current;
       setFloats((f) => [...f, { id, x: e.clientX - rect.left, y: e.clientY - rect.top }]);

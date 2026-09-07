@@ -226,6 +226,8 @@ export function useWakeTaps(options: WakeTapsOptions = {}): WakeTaps {
   })();
 
   const [taps, setTaps] = useState(saved.taps || 0);
+  /** The authoritative tap count for the milestone check — see `tap`. Seeded from the restore. */
+  const tapCount = useRef<number>(saved.taps || 0);
   const [awake, setAwake] = useState(saved.awake || 0);
   const [global, setGlobal] = useState<number | null>(null);
   const [streak, setStreak] = useState<WakeStreak | null>(null);
@@ -282,16 +284,28 @@ export function useWakeTaps(options: WakeTapsOptions = {}): WakeTaps {
 
   const tap = useCallback(() => {
     pending.current += 1;
-    setTaps((t) => {
-      const next = t + 1;
-      // Crossing a milestone is the one moment the server has a NEW line for this player, so it is
-      // read now rather than on the next poll. Outside a setState updater this would read a `taps`
-      // captured at render time and miss the crossing entirely on a fast tapper.
-      if (crossedMilestone(t, next)) readMeRef.current();
-      return next;
-    });
+    /*
+     * THE COUNT IS KEPT IN A REF AS WELL, and the milestone check reads THAT.
+     *
+     * The obvious spellings are both wrong. Reading `taps` from the closure gives the value
+     * captured at render, so a fast tapper crosses 100 between paints and never triggers. Doing the
+     * check inside the setTaps updater sees the right number but puts a NETWORK CALL inside a
+     * function React requires to be pure — it may re-invoke an updater (concurrent rendering, and
+     * StrictMode double-invokes it by design), which fires the read twice. That the app currently
+     * sets `reactStrictMode: false` in next.config.js is not a defence; it is one config flip away
+     * from being a duplicated request per milestone.
+     *
+     * A ref incremented synchronously here is exact and pure in both directions.
+     */
+    const before = tapCount.current;
+    const next = before + 1;
+    tapCount.current = next;
+    setTaps(next);
     setAwake(nextAwake);
     setGlobal((g) => (g === null ? g : g + 1));
+    // Crossing a milestone is the one moment the server has a new line for this player (see
+    // GREETING_MILESTONES), so it is read now rather than up to 30s later on the poll.
+    if (crossedMilestone(before, next)) readMeRef.current();
   }, []);
 
   useEffect(() => {

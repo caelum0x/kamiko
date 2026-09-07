@@ -625,11 +625,32 @@ export default function Home() {
       {showTapToWake && (
         <TapToWake
           speak={speakAsHer}
+          onTap={() => {
+            /*
+             * TAPPING IS A REAL WAKE SIGNAL, not a meter.
+             *
+             * Her wakefulness is owned by chat.lastAwake and by amicaLife (enabled by default),
+             * which puts her to `Sleep` on idle and pauses itself. Nothing outside amicaLife called
+             * wakeFromSleep(), so before this the player could tap the bar to 100% while she stayed
+             * asleep in the system that decides whether she idles, animates and speaks on her own —
+             * and the panel painted `happy` over a sleeping face. "Tap to wake her" was a caption.
+             */
+            try { bot.updateAwake(); } catch { /* chat is not initialized yet */ }
+          }}
           setMood={(mood) => {
-            // playEmotion drives the FACE and the body's idle mood together (model.ts) with no
-            // audio, so this is what waking her actually looks like. Guarded: the VRM may still be
-            // loading, and a tap before it lands must not throw on the stage.
-            try { bot.viewer?.model?.playEmotion(mood); } catch { /* the model is not up yet */ }
+            try {
+              // WHILE SHE IS SPEAKING, THE CHAT OWNS HER FACE. processSpeakJobs sets the expression
+              // from the screenplay for the sentence she is delivering; overwriting it mid-word
+              // because the meter crossed a band is the panel talking over her.
+              if (chatSpeaking) return;
+              // wakeFromSleep() FIRST, and it matters: it ends amicaLife's sleep state AND writes
+              // "Neutral" itself, so doing it after playEmotion would immediately overwrite the
+              // mood we just set. Only on a waking mood — a `Sleep` mood is agreement, not a
+              // conflict, and forcing her awake to render "asleep" is nonsense.
+              if (mood !== 'Sleep') amicaLife.wakeFromSleep();
+              // playEmotion drives the FACE and the body's idle mood together (model.ts), no audio.
+              bot.viewer?.model?.playEmotion(mood);
+            } catch { /* the model or amicaLife is not up yet; a tap must not throw on the stage */ }
           }}
           openDashboard={() => router.push("/game")}
           onClose={() => setShowTapToWake(false)}
