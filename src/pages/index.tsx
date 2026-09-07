@@ -127,6 +127,11 @@ export default function Home() {
   const { alert } = useContext(AlertContext);
   const { chat: bot } = useContext(ChatContext);
 
+
+  const { amicaLife: amicaLife } = useContext(AmicaLifeContext);
+
+  const [chatSpeaking, setChatSpeaking] = useState(false);
+
   /**
    * SAY A LINE AS HER, not as page text.
    *
@@ -141,21 +146,43 @@ export default function Home() {
    * abandon in-flight speech — reusing it means a tap line is dropped by the same interrupt that
    * drops a chat reply, instead of talking over her.
    */
-  const speakAsHer = useCallback((line: string) => {
+  const speakAsHer = useCallback(async (line: string) => {
     const text = String(line ?? "").trim();
     if (!text) return;
+    // Never talk over a chat reply. The tap line is an aside, not a turn.
+    if (chatSpeaking) return;
     try {
       const [screenplay] = textsToScreenplay([text]);
       if (!screenplay) return;
-      bot.ttsJobs.enqueue({ screenplay, streamIdx: bot.currentStreamIdx });
+      /*
+       * SPOKEN DIRECTLY, DELIBERATELY BYPASSING chat.ttsJobs.
+       *
+       * The obvious wiring — enqueue onto ttsJobs — was wrong, and quietly. That queue ends in
+       * processSpeakJobs, which calls bubbleMessage("assistant", …) for every job. bubbleMessage
+       * APPENDS (`currentAssistantMessage += text`) and the result is pushed onto `messageList`,
+       * and `messageList` is spliced into the prompt on the next user turn
+       * (receiveMessageFromUser: [system, ...messageList, user]).
+       *
+       * So routing tap lines through the queue put them in her CONVERSATION MEMORY: a greeting the
+       * player never said anything to earn, glued onto whatever she last replied, sent to the model
+       * as prior context on every subsequent turn. A clicker milestone is not something she said to
+       * you, and it must not become something the model believes she said.
+       *
+       * fetchAudio + model.speak is the same pair processSpeakJobs uses, minus the logging.
+       */
+      const audio = await bot.fetchAudio(screenplay.talk);
+      if (audio) {
+        await bot.viewer?.model?.speak(audio, screenplay);
+      } else {
+        // No TTS configured, or it failed: fetchAudio swallows both and returns null. She still
+        // REACTS — playEmotion is what model.speak would have called — rather than doing nothing.
+        bot.viewer?.model?.playEmotion(screenplay.expression);
+      }
     } catch (e) {
       // A tap must never be able to take down the avatar screen. The panel still shows the line.
       console.error("tap-to-wake could not speak the line", e);
     }
-  }, [bot]);
-  const { amicaLife: amicaLife } = useContext(AmicaLifeContext);
-
-  const [chatSpeaking, setChatSpeaking] = useState(false);
+  }, [bot, chatSpeaking]);
   const [chatProcessing, setChatProcessing] = useState(false);
   const [chatLog, setChatLog] = useState<Message[]>([]);
   const [assistantMessage, setAssistantMessage] = useState("");

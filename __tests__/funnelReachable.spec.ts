@@ -200,6 +200,22 @@ describe('tapping actually wakes her', () => {
     expect(panel).not.toMatch(/useEffect\(\s*\(\)\s*=>\s*\(\)\s*=>\s*setMoodRef/);
   });
 
+  it('a tap line is SPOKEN, never written into her conversation memory', () => {
+    /*
+     * chat.ttsJobs ends in processSpeakJobs, which calls bubbleMessage("assistant", …) for every
+     * job. bubbleMessage APPENDS to currentAssistantMessage, that lands in `messageList`, and
+     * receiveMessageFromUser splices `messageList` into the prompt as prior context on the next
+     * turn. Routing a clicker milestone through that queue therefore teaches the model she said a
+     * greeting nobody earned, glued onto her last real reply, on every subsequent turn.
+     *
+     * The tap path must use fetchAudio + model.speak — the same pair, minus the logging.
+     */
+    expect(index).toMatch(/fetchAudio\(/);
+    expect(index).toMatch(/model\?\.speak\(/);
+    expect(index).not.toMatch(/ttsJobs\.enqueue/);
+    expect(index).not.toMatch(/bubbleMessage/);
+  });
+
   it('the panel does not write her face while the chat is speaking', () => {
     // processSpeakJobs sets the expression for the sentence she is delivering. Overwriting it
     // because the meter crossed a band is the panel talking over her.
