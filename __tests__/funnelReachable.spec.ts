@@ -122,6 +122,27 @@ describe('the front door leads to every funnel surface', () => {
     expect(panel).not.toMatch(/openDashboard/);
   });
 
+  it('both surfaces publish the contract on the SAME rule', () => {
+    /*
+     * The rule is "links whenever the verifier published a contract" — which includes `caution`,
+     * where cta.ts returns links and says "the links below are the real contract — read the trust
+     * page before you buy". Gating on `state === 'live'` looks stricter and is more dangerous: it
+     * withholds the real address from exactly the person who is about to go searching for it, and
+     * searching is how somebody lands on an impostor.
+     *
+     * Neither surface may quietly become the stricter one, so neither may test the state to decide
+     * whether to LINK.
+     */
+    for (const file of ['src/pages/game.tsx', 'src/components/tapToWake.tsx']) {
+      const src = sourceKeepingLiterals(read(file));
+      // A bounded multi-line window, not `[^\n]*`: the gate and the link it guards sit on different
+      // lines in JSX, so a single-line pattern could never see them together — which is how the
+      // first version of this check passed on deliberately sabotaged code.
+      const gatesLinkOnLive = /state === 'live'[\s\S]{0,300}?(buy|chart)/.test(src);
+      expect(gatesLinkOnLive ? `${file} gates the buy/chart links on state === 'live'` : 'links on cta presence').toBe('links on cta presence');
+    }
+  });
+
   it('the dashboard reads are SHARED with /game, not a second copy', () => {
     // The refusals in useNpcBoard are the honest-money rules — a leaderboard that shows real
     // players or nothing, a CTA written by the verifier or not at all. Two copies of those drift,

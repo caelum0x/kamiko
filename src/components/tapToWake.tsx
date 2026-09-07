@@ -267,14 +267,29 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
         <button onClick={() => void board.copyCa()} className="w-full truncate text-left text-[11px] opacity-80 hover:opacity-100">
           {board.caText}
         </button>
-        {board.cta?.cta && board.cta.state === 'live' ? (
+        {/*
+          THE LINKS SHOW WHENEVER THE VERIFIER PUBLISHED A CONTRACT — including `caution`, and that
+          is deliberate rather than lax.
+          This gate was `state === 'live'` at first, which looks like the careful reading and is the
+          dangerous one. On a `caution` verdict cta.ts still returns the links and says why: "the
+          links below are the real contract — read the trust page before you buy." Withholding them
+          does not stop anybody buying; it sends them to search for the token themselves, which is
+          exactly how somebody ends up on an impostor. The warning goes NEXT to the links, not
+          instead of them. `unsafe`, `not-launched` and `unverified` carry no cta at all, so there
+          is nothing to show and nothing to withhold.
+        */}
+        {board.cta?.cta ? (
           <div className="mt-1 flex gap-2">
             <button onClick={() => openLink?.(board.cta!.cta!.buy)} className="flex-1 rounded-lg bg-white/15 py-1 text-[11px] hover:bg-white/25">buy</button>
             <button onClick={() => openLink?.(board.cta!.cta!.chart)} className="flex-1 rounded-lg bg-white/10 py-1 text-[11px] hover:bg-white/20">chart</button>
           </div>
-        ) : (
-          <p className="mt-1 text-[11px] opacity-60">{board.cta?.detail ?? 'no verified contract yet — beware impostors.'}</p>
-        )}
+        ) : null}
+        {board.cta && board.cta.state !== 'live' ? (
+          <p className="mt-1 text-[11px] opacity-70"><b>{board.cta.title}</b> {board.cta.detail}</p>
+        ) : null}
+        {!board.cta ? (
+          <p className="mt-1 text-[11px] opacity-60">no verified contract yet — beware impostors.</p>
+        ) : null}
       </div>
     </div>
   );
