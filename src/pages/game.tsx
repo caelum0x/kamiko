@@ -88,7 +88,7 @@ export default function GamePage() {
    */
   const onGreeting = useCallback((text: string) => { setLine(text); setDim(true); }, []);
   const engine = useWakeTaps({ onGreeting });
-  const { ready, taps, awake, global, streak, level, throttledNow, backOff, device, wallet, setWallet } = engine;
+  const { configured, ready, taps, awake, global, streak, level, throttledNow, backOff, device, wallet, setWallet } = engine;
 
   /** Mirrors the values the callbacks below read on every tick without re-subscribing. */
   const live = useRef({ taps, awake, wallet, global });
@@ -354,6 +354,18 @@ export default function GamePage() {
           {coach && <div className="npcg-coach"><b>TAP TO WAKE HER 👆</b><div>she's asleep inside the market. keep tapping.</div></div>}
           <div className="npcg-bar-row"><span>AWAKENESS</span><span>{Math.floor(awake)}%</span></div>
           <div className="npcg-bar"><span style={{ width: awake + '%' }} /></div>
+          {/*
+            SAY SO WHEN THE TAPS GO NOWHERE. The counter, the meter and the face are all local, so
+            without this line an unconfigured build is indistinguishable from a working one: you tap
+            two hundred times, everything animates, and npc-api never heard from you. /holder and
+            /trust already report an unset NEXT_PUBLIC_NPC_API — this page did not.
+          */}
+          {!configured && (
+            <div className="npcg-line">
+              no funnel API configured (NEXT_PUBLIC_NPC_API) — these taps are counted on this device
+              only. nothing reaches the leaderboard, your streak, or her memory.
+            </div>
+          )}
         </div>
 
         <div className="npcg-grid">

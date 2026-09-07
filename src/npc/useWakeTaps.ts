@@ -161,6 +161,16 @@ export interface WakeLevel {
 }
 
 export interface WakeTaps {
+  /**
+   * Is there a funnel API to send taps to at all?
+   *
+   * False when NEXT_PUBLIC_NPC_API is unset, which is a real deployment state — a build shipped
+   * without it. Both tap surfaces MUST render this, because the failure is otherwise completely
+   * invisible: the local counter still climbs, the meter still fills, the emoji still changes, and
+   * nothing has ever reached npc-api. A player taps two hundred times into a page that looks like
+   * it is working. /holder and /trust already say so in this situation; the clicker did not.
+   */
+  configured: boolean;
   /** False until identity has resolved after mount — localStorage is client-only under SSR. */
   ready: boolean;
   /** Lifetime taps this browser has counted, including ones not yet accepted. */
@@ -425,5 +435,5 @@ export function useWakeTaps(options: WakeTapsOptions = {}): WakeTaps {
     };
   }, [ready, applyStreak, throttledNow, backOff, meEveryMs]);
 
-  return { ready, taps, awake, global, streak, level, mood: moodFor(awake), tap, throttledNow, backOff, device, wallet, setWallet };
+  return { configured: Boolean(API), ready, taps, awake, global, streak, level, mood: moodFor(awake), tap, throttledNow, backOff, device, wallet, setWallet };
 }

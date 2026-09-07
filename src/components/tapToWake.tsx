@@ -80,7 +80,7 @@ export function TapToWake({ speak, setMood, openDashboard, onClose }: TapToWakeP
     speakRef.current?.(text);
   }, []);
 
-  const { taps, awake, global, streak, mood, tap } = useWakeTaps({ onGreeting });
+  const { configured, taps, awake, global, streak, mood, tap } = useWakeTaps({ onGreeting });
 
   /**
    * Drive her expression from the meter — ONLY WHEN IT CHANGES.
@@ -148,6 +148,19 @@ export function TapToWake({ speak, setMood, openDashboard, onClose }: TapToWakeP
           </span>
         ))}
       </button>
+
+      {/*
+        SAY SO WHEN THE TAPS GO NOWHERE. Without this the panel is indistinguishable from a working
+        one: the counter climbs, the meter fills and her face still changes, because all three are
+        local. /holder and /trust already report an unset NEXT_PUBLIC_NPC_API; the clicker counted
+        into the void on both of its surfaces.
+      */}
+      {!configured ? (
+        <p className="mt-2 rounded-lg bg-amber-500/20 p-2 text-[11px] leading-snug">
+          this build has no funnel API configured (NEXT_PUBLIC_NPC_API), so these taps are counted
+          on your device only — nothing reaches the leaderboard, the streak or her memory.
+        </p>
+      ) : null}
 
       <div className="mt-2 flex justify-between text-xs opacity-70">
         <span>you: {taps}</span>

@@ -32,6 +32,23 @@ function withoutComments(source: string): string {
 }
 
 /**
+ * Strip string literals and JSX text too, for the same reason comments are stripped: PROSE IS NOT
+ * A CHECK.
+ *
+ * Found by this file's own negative control. The unset-API assertion below looks for `configured`,
+ * and the copy it is meant to guarantee says "this build has no funnel API configured (…)" — so
+ * deleting the actual branch and keeping the sentence still passed. A gate a user-facing string can
+ * satisfy is testing spelling.
+ */
+function codeOnly(source: string): string {
+  return withoutComments(source)
+    .replace(/`(?:[^`\\]|\\.)*`/g, '``')
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
+    .replace(/>[^<>{}]+</g, '><');
+}
+
+/**
  * Every funnel route, and what a visitor loses when nothing on `/` leads to it. The `why` is in the
  * failure message on purpose: "route unreachable" is a fact, and the reason is what decides whether
  * somebody fixes it now or after the launch.
@@ -78,5 +95,42 @@ describe('the front door leads to every funnel surface', () => {
     expect(index.length).toBeGreaterThan(2000);
     expect(index).toMatch(/MenuButton/);
     expect(panel).toMatch(/useWakeTaps/);
+  });
+});
+
+/**
+ * THE SECOND WAY A SURFACE STOPS EXISTING: it renders perfectly and talks to nothing.
+ *
+ * `NEXT_PUBLIC_NPC_API` is inlined at BUILD time, so a build shipped without it produces pages that
+ * animate, count, fill a meter and change an avatar's face while npc-api has never heard from them.
+ * /holder and /trust have always said so. Both tap surfaces did not: they counted into localStorage
+ * and showed '…' for the global, which is exactly what a working page shows while it is loading.
+ *
+ * The rule is therefore: a page that reads `API` must also render something when it is unset.
+ */
+describe('a surface that talks to nothing says so', () => {
+  const SURFACES = [
+    { file: 'src/pages/game.tsx', what: 'the clicker dashboard' },
+    { file: 'src/pages/holder.tsx', what: 'the holder dashboard — tier, perks and tips' },
+    { file: 'src/pages/trust.tsx', what: 'the mint verification' },
+    { file: 'src/components/tapToWake.tsx', what: 'the tap panel on the avatar screen' },
+  ] as const;
+
+  for (const { file, what } of SURFACES) {
+    it(`${file} reports an unset NEXT_PUBLIC_NPC_API — ${what}`, () => {
+      const src = codeOnly(read(file));
+      // Either it reads `API` directly and branches on it, or it takes `configured` from the engine
+      // (useWakeTaps), which is `Boolean(API)`. Both are a real check; neither is a comment.
+      const branches = /!\s*API\b/.test(src) || /\bconfigured\b/.test(src);
+      const verdict = branches
+        ? 'reports it'
+        : `SILENT — ${file} (${what}) reads the funnel API but renders nothing when NEXT_PUBLIC_NPC_API is unset. The page still animates, so a visitor cannot tell it is talking to nothing.`;
+      expect(verdict).toBe('reports it');
+    });
+  }
+
+  it('the engine is what both tap surfaces ask, so there is one answer', () => {
+    // Two independent Boolean(API) checks are two things to forget to update.
+    expect(read('src/npc/useWakeTaps.ts')).toMatch(/configured:\s*Boolean\(API\)/);
   });
 });
