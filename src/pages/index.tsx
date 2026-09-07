@@ -647,7 +647,15 @@ export default function Home() {
               // "Neutral" itself, so doing it after playEmotion would immediately overwrite the
               // mood we just set. Only on a waking mood — a `Sleep` mood is agreement, not a
               // conflict, and forcing her awake to render "asleep" is nonsense.
-              if (mood !== 'Sleep') amicaLife.wakeFromSleep();
+              if (mood !== 'Sleep') {
+                // THE CANONICAL SEQUENCE, copied from amicaLife.checkSettingOff — the repo's own
+                // answer to "the user came back". wakeFromSleep() alone is not waking her:
+                // handleSleepEvent PAUSED the loop on the way in (amicaLife.pause()), and clearing
+                // isSleep without resume() leaves her neither asleep nor running.
+                amicaLife.wakeFromSleep();
+                bot.updateAwake();
+                amicaLife.resume();
+              }
               // playEmotion drives the FACE and the body's idle mood together (model.ts), no audio.
               bot.viewer?.model?.playEmotion(mood);
             } catch { /* the model or amicaLife is not up yet; a tap must not throw on the stage */ }

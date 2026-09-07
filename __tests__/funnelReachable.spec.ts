@@ -32,20 +32,25 @@ function withoutComments(source: string): string {
 }
 
 /**
- * Strip string literals and JSX text too, for the same reason comments are stripped: PROSE IS NOT
- * A CHECK.
+ * Strip string literals as well as comments, for the same reason: PROSE IS NOT A CHECK.
  *
- * Found by this file's own negative control. The unset-API assertion below looks for `configured`,
- * and the copy it is meant to guarantee says "this build has no funnel API configured (…)" — so
- * deleting the actual branch and keeping the sentence still passed. A gate a user-facing string can
- * satisfy is testing spelling.
+ * Found by this file's own negative control. The unset-API assertion looks for `configured`, and
+ * the copy it guarantees says "…no funnel API configured (NEXT_PUBLIC_NPC_API)" — so deleting the
+ * branch and keeping the sentence passed. A gate a user-facing string can satisfy tests spelling.
+ *
+ * IT DOES NOT TOUCH JSX TEXT, and that is a correction rather than an omission. A rule that
+ * stripped `>…<` spans looked right and was DESTRUCTIVE: with no newline bound it matched from the
+ * `>` of an arrow function to the `<` of a later generic, deleting the real code in between —
+ * `useEffect(() => () => setMoodRef…)` became `useEffect(() => () =><HTMLButtonElement>) => {`.
+ * A scanner that corrupts what it scans can report anything. The prose problem is solved on the
+ * assertion side instead: the checks below look for CODE-SHAPED uses of an identifier, which no
+ * sentence produces.
  */
 function codeOnly(source: string): string {
   return withoutComments(source)
     .replace(/`(?:[^`\\]|\\.)*`/g, '``')
     .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
-    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
-    .replace(/>[^<>{}]+</g, '><');
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""');
 }
 
 /**
@@ -121,7 +126,13 @@ describe('a surface that talks to nothing says so', () => {
       const src = codeOnly(read(file));
       // Either it reads `API` directly and branches on it, or it takes `configured` from the engine
       // (useWakeTaps), which is `Boolean(API)`. Both are a real check; neither is a comment.
-      const branches = /!\s*API\b/.test(src) || /\bconfigured\b/.test(src);
+      // Code-shaped uses only: negated, destructured, or in a conditional. A sentence containing
+      // the word "configured" produces none of these.
+      const branches =
+        /!\s*API\b/.test(src) ||
+        /!\s*configured\b/.test(src) ||
+        /[{,]\s*configured\s*[,}]/.test(src) ||
+        /\bconfigured\s*[?&|]/.test(src);
       const verdict = branches
         ? 'reports it'
         : `SILENT — ${file} (${what}) reads the funnel API but renders nothing when NEXT_PUBLIC_NPC_API is unset. The page still animates, so a visitor cannot tell it is talking to nothing.`;
@@ -171,6 +182,22 @@ describe('tapping actually wakes her', () => {
     expect(wake).toBeGreaterThan(-1);
     expect(play).toBeGreaterThan(-1);
     expect(wake).toBeLessThan(play);
+  });
+
+  it('waking her is the FULL sequence, not just clearing the sleep flag', () => {
+    // handleSleepEvent pauses the amicaLife loop on the way in, so wakeFromSleep() alone leaves her
+    // neither asleep nor running. amicaLife.checkSettingOff is the repo's own canonical answer to
+    // "the user came back" — wakeFromSleep, updateAwake, resume — and this must match it.
+    for (const call of ['wakeFromSleep()', 'updateAwake()', 'resume()']) {
+      expect(index).toContain(call);
+    }
+  });
+
+  it('closing the panel does NOT wake her', () => {
+    // The bug this replaced: the panel reset her to 'neutral' on unmount, and `setMood` is the
+    // WAKING path — so opening and closing it without tapping once pulled her out of the sleep the
+    // idle timer had put her in.
+    expect(panel).not.toMatch(/useEffect\(\s*\(\)\s*=>\s*\(\)\s*=>\s*setMoodRef/);
   });
 
   it('the panel does not write her face while the chat is speaking', () => {

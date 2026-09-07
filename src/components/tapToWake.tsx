@@ -105,9 +105,18 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openDashboard, o
     setMoodRef.current?.(mood);
   }, [mood]);
 
-  // She returns to neutral when the panel closes: leaving her stuck mid-'happy' after the game is
-  // put away is the avatar wearing an expression nothing on screen explains.
-  useEffect(() => () => setMoodRef.current?.('neutral'), []);
+  /*
+   * THE PANEL WRITES NOTHING ON THE WAY OUT, and the first version of this was a bug.
+   *
+   * It used to reset her to 'neutral' on unmount, reasoning that leaving her stuck mid-'happy' is
+   * an expression nothing on screen explains. But `setMood` is the WAKING path — index.tsx ends
+   * amicaLife's sleep for any mood that is not 'Sleep' — so closing the panel woke her up. Open it,
+   * close it without tapping once, and she is out of the sleep the idle timer had put her in.
+   *
+   * There is nothing to clean up anyway: amicaLife and the chat both write her face, and amicaLife
+   * sleeps her on idle regardless. The panel is a guest on the stage; it does not get an opinion
+   * about her once it is gone.
+   */
 
   const tapSignalRef = useRef(onTapSignal);
   tapSignalRef.current = onTapSignal;
