@@ -1,7 +1,7 @@
 /**
  * cta.ts — what the funnel is allowed to SAY about the contract.
  *
- * One source for every $NPC surface in amica (the game, the holder dashboard, the trust page). The
+ * One source for every $KAMIKO surface in amica (the game, the holder dashboard, the trust page). The
  * rule it exists to enforce: the buy/chart CTA is written by the on-chain verifier or not at all.
  * GET /trust is the only thing that knows the real mint, and the states below are kept apart on
  * purpose, because collapsing any two of them produces a false statement on a page people buy from.
@@ -140,7 +140,7 @@ export function ctaState(report: any): CtaState {
         state: 'not-launched',
         cta: null,
         title: 'not launched.',
-        detail: detail || 'there is no contract yet — anything calling itself $NPC right now is not us.',
+        detail: detail || 'there is no contract yet — anything calling itself $KAMIKO right now is not us.',
       };
     }
     return unverified(detail || 'the verifier could not produce a report right now.');

@@ -221,13 +221,13 @@ export function topicRefusal(status: number, body: unknown): string {
   const b = body && typeof body === 'object' ? (body as Record<string, unknown>) : null;
   const err = b && typeof b.error === 'string' ? b.error : '';
   if (status === 403 && b?.tierStatus === 'error') {
-    return 'your $NPC balance could not be read on-chain just now, so the perk is denied (it fails closed, never open). try again in a minute.';
+    return 'your $KAMIKO balance could not be read on-chain just now, so the perk is denied (it fails closed, never open). try again in a minute.';
   }
   if (status === 403 && b?.tierStatus === 'disabled') {
-    return '$NPC has not launched yet — there is no on-chain tier to check, so this perk is not live.';
+    return '$KAMIKO has not launched yet — there is no on-chain tier to check, so this perk is not live.';
   }
   if (status === 403 && b?.tier) {
-    return 'this perk needs sentient tier — you are ' + String(b.tier) + '. hold more $NPC and reconnect.';
+    return 'this perk needs sentient tier — you are ' + String(b.tier) + '. hold more $KAMIKO and reconnect.';
   }
   if (status === 403) return 'connect again first — this session is no longer signed in.';
   if (status === 400) return 'type an actual topic — letters and numbers, one line.';

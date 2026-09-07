@@ -3,7 +3,7 @@
  *
  * airi is the other VTuber platform this repo vendors. Its UI is Vue and cannot be dropped into
  * amica's React tree, but its framework-agnostic TypeScript can — this is one of those pieces,
- * copied in verbatim (zero dependencies) so $NPC gains airi's capability without a rewrite. It is a
+ * copied in verbatim (zero dependencies) so $KAMIKO gains airi's capability without a rewrite. It is a
  * generic async processing queue: items are enqueued, drained one at a time through a list of async
  * handlers, and every stage (enqueue / dequeue / process / result / error / drain) emits an event a
  * caller can observe. The game uses it for a resilient /wake send pipeline (see game.tsx).

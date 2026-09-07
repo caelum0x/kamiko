@@ -133,7 +133,7 @@ export default function Share() {
   const [registerError, setRegisterError] = useState('');
 
   /**
-   * Where this page's character registry lives. NOT the $NPC funnel API — this is upstream amica's
+   * Where this page's character registry lives. NOT the $KAMIKO funnel API — this is upstream amica's
    * own character-sharing backend, and it is a completely separate deployment concern.
    *
    * It is read once, here, so the button can refuse before it spins. Unset, the template literal

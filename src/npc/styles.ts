@@ -1,5 +1,5 @@
 /**
- * styles.ts — the ONE stylesheet the $NPC funnel surfaces inside amica render with.
+ * styles.ts — the ONE stylesheet the $KAMIKO funnel surfaces inside amica render with.
  *
  * The game and the holder dashboard are the same product with the same chrome, and they used to be
  * two copies of the same 40 rules — which is how the two pages drift into looking like two products.
@@ -15,8 +15,12 @@ export const NPC_CSS = `
 .npcg-ca{background:none;border:0;color:var(--dim);font:inherit;font-size:11px;cursor:pointer}
 .npcg-stage{position:relative;border:1px solid var(--line);background:var(--panel);border-radius:16px;padding:28px 16px;text-align:center}
 .npcg-line{min-height:34px;font-size:13px;line-height:1.5;color:var(--ink)}.npcg-line.dim{color:var(--dim)}
-.npcg-face{background:none;border:0;cursor:pointer;line-height:0;margin:10px auto;padding:0;display:block;transition:transform .05s}.npcg-face:active{transform:scale(.95)}.npcg-face.sleepy{opacity:.82}
-.npcg-face svg{width:136px;height:136px;display:block}
+.npcg-face{background:none;border:0;cursor:pointer;line-height:0;margin:10px auto;padding:0;display:block;transition:transform .18s cubic-bezier(.2,.8,.2,1),filter .18s ease;will-change:transform,filter;-webkit-tap-highlight-color:transparent}
+.npcg-face:hover{transform:translateY(-2px) scale(1.035) rotate(-1.2deg);filter:drop-shadow(0 10px 30px rgba(0,255,163,.32))}
+.npcg-face:active{transform:scale(.94) rotate(0deg);filter:drop-shadow(0 4px 16px rgba(139,92,246,.4))}
+.npcg-face.sleepy{opacity:.9;filter:saturate(.82) brightness(.94)}
+.npcg-face.sleepy:hover{filter:saturate(1) brightness(1) drop-shadow(0 10px 30px rgba(0,255,163,.22))}
+.npcg-face svg{width:150px;height:150px;display:block}
 .npcg-ic{display:inline-block;vertical-align:-.18em;flex:0 0 auto}
 .npcg-daily{display:inline-block;margin-right:6px;padding:1px 6px;border:1px solid var(--neon);border-radius:5px;color:var(--neon);font-size:9px;letter-spacing:1.5px;vertical-align:1px}
 .npcg-coach{margin-bottom:8px;font-size:13px}.npcg-coach b{color:var(--neon)}.npcg-coach div{font-size:11px;color:var(--dim)}

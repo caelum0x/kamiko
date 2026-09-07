@@ -1,5 +1,5 @@
 /**
- * game.tsx — $NPC, the "tap to wake her" clicker, living INSIDE the amica product.
+ * game.tsx — $KAMIKO, the "tap to wake her" clicker, living INSIDE the amica product.
  *
  * This is the funnel game (was a throwaway static page) rebuilt as a first-class amica route. It
  * talks to OUR stack over HTTP — every call goes to services/game-api, reached through the same
@@ -466,7 +466,7 @@ export default function GamePage() {
     const landing = API + '/s?' + idFor();
     const text = `i've woken the NPC ${taps.toLocaleString()} times and she's losing it. tap to wake her too:`;
     const intent = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(landing);
-    if (typeof navigator !== 'undefined' && (navigator as any).share) (navigator as any).share({ title: '$NPC', text, url: landing }).catch(() => window.open(intent, '_blank'));
+    if (typeof navigator !== 'undefined' && (navigator as any).share) (navigator as any).share({ title: '$KAMIKO', text, url: landing }).catch(() => window.open(intent, '_blank'));
     else window.open(intent, '_blank');
   };
 
@@ -474,14 +474,14 @@ export default function GamePage() {
 
   return (
     <div className="npcg-root">
-      <Head><title>$NPC — tap to wake her</title></Head>
+      <Head><title>$KAMIKO — tap to wake her</title></Head>
       {/* raw-text element — see agents.tsx: a text child is SSR entity-escaped (`>` → `&gt;`) and
           never un-escaped, breaking `.npcg-bar>span` pre-hydration and mismatching hydration. */}
       <style dangerouslySetInnerHTML={{ __html: NPC_CSS }} />
 
       <div className="npcg-wrap">
         <header className="npcg-head">
-          <div className="npcg-logo">$<b>NPC</b></div>
+          <div className="npcg-logo">$<b>KAMIKO</b></div>
           <button onClick={copyCa} className="npcg-ca" title="the mint, once the verifier publishes one">{caText}</button>
         </header>
 
@@ -510,7 +510,7 @@ export default function GamePage() {
 
         {cta && cta.cta && (
           <div className="npcg-cta-row">
-            <a className="npcg-buy" href={cta.cta.buy} target="_blank" rel="noopener noreferrer">BUY $NPC</a>
+            <a className="npcg-buy" href={cta.cta.buy} target="_blank" rel="noopener noreferrer">BUY $KAMIKO</a>
             <a className="npcg-chart" href={cta.cta.chart} target="_blank" rel="noopener noreferrer"><ChartIcon /> CHART</a>
           </div>
         )}
@@ -556,7 +556,7 @@ export default function GamePage() {
         )}
 
         <p className="npcg-fine">
-          Not financial advice. $NPC isn&apos;t live yet — no official contract exists.
+          Not financial advice. $KAMIKO isn&apos;t live yet — no official contract exists.
         </p>
       </div>
     </div>

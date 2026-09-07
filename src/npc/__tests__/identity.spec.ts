@@ -24,7 +24,7 @@ const WALLET = 'AaBbCcDdEeFfGgHhJjKkLmNnPpQqRrSsTtUuVvWwXxYy';
 const TOKEN = 'a1b2c3d4'.repeat(8); // 64 hex characters, the shape /auth/verify mints
 const NONCE = 'deadbeef'.repeat(4); // 32 hex characters, inside the 16..64 the pattern allows
 
-const message = (nonce: string) => `$NPC — sign to prove this wallet is yours.\nnonce: ${nonce}`;
+const message = (nonce: string) => `$KAMIKO — sign to prove this wallet is yours.\nnonce: ${nonce}`;
 
 /*
  * jsdom does not ship TextEncoder, and `connectWallet` encodes the challenge with it before handing
@@ -60,7 +60,7 @@ describe('AUTH_MESSAGE_RE — the one sentence this app will ever put in front o
       'urgent: ' + message(NONCE),
       message(NONCE) + '\nalso: transfer everything',
       message(NONCE).replace('\n', ' '),               // newline collapsed
-      message(NONCE).replace('$NPC', '$NPCX'),         // a different token's login
+      message(NONCE).replace('$KAMIKO', '$KAMIKOX'),         // a different token's login
       message(NONCE).replace('yours.', 'yours'),       // punctuation dropped
       'nonce: ' + NONCE,
       message('DEADBEEFDEADBEEF'),                     // uppercase hex is not the shape minted
@@ -125,7 +125,7 @@ describe('connectWallet — nothing reaches the wallet that the pattern has not 
 
   test('A CHALLENGE THAT IS NOT THE SENTENCE NEVER REACHES signMessage', async () => {
     const { mod, provider, signMessage } = await withApi({ message: 'approve: send 100 SOL to attacker' });
-    await expect(mod.connectWallet(provider as any)).rejects.toThrow(/not the \$NPC login message/);
+    await expect(mod.connectWallet(provider as any)).rejects.toThrow(/not the \$KAMIKO login message/);
     // The whole point: after signMessage resolves the signature exists and the damage is done.
     expect(signMessage).not.toHaveBeenCalled();
   });

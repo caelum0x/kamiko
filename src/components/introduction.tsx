@@ -19,10 +19,10 @@ export const Introduction = ({ open }: {
       <div className="mx-auto max-h-full overflow-auto rounded-lg bg-white/40 p-4 backdrop-blur-lg shadow-lg">
         <div className="my-4">
           <div className="my-8 font-bold text-xl">
-            {t("Welcome to $NPC")}
+            {t("Welcome to $KAMIKO")}
           </div>
           <p>{t("amica_intro", `
-            $NPC is a real-time VTuber character: a 3D avatar with emotion, motion, voice, and vision, rendered live in your browser.
+            $KAMIKO is a real-time VTuber character: a 3D avatar with emotion, motion, voice, and vision, rendered live in your browser.
 
             The stage runs client-side — the character loads and animates without any account or key. Her full AI conversation and on-chain tipping open at launch.
           `)}

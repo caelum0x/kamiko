@@ -1,7 +1,7 @@
 /**
- * icons.tsx — the $NPC clicker's vector icon set and the mascot tap-face.
+ * icons.tsx — the $KAMIKO clicker's vector icon set and the mascot tap-face.
  *
- * No emoji in the UI (owner rule): the tap target is the actual $NPC character art, and every
+ * No emoji in the UI (owner rule): the tap target is the actual $KAMIKO character art, and every
  * HUD/nav glyph is a clean feather-style stroke icon that inherits the app palette through
  * `currentColor`. Keeping them here as small inline components means the game ships no emoji
  * codepoints and no icon-font dependency.
@@ -125,22 +125,52 @@ export const GiftIcon = (p: IconProps) => (
 );
 
 /**
- * NpcFace — the tappable mascot. Driven by awakeness: the left eye is a flat, dim "asleep" line
- * that opens into a glowing neon eye as she wakes, and the mouth lifts once she is hyped. This is
- * the whole "the NPC that woke up" concept in one glyph, and it is the tap target itself.
+ * NpcFace — the tappable mascot: Kamiko, the same silver-haired anime VTuber who stands on the 3D
+ * stage, drawn as a polished inline-SVG bust. She is heterochromatic on purpose — the RIGHT eye is
+ * always open and violet, the LEFT eye starts as a dim, closed "asleep" lash line and OPENS into a
+ * glowing neon-green eye as `awake` rises. Her cheeks flush and her mouth lifts into a soft smile
+ * once she is hyped, and a neon awakening halo behind her intensifies the whole way up. This whole
+ * "the NPC that woke up" arc lives in one portrait, and the portrait is the tap target itself.
  */
 export function NpcFace({ awake }: { awake: number }) {
-  const leftAwake = awake >= 45;
-  const hyped = awake >= 85;
+  const a = Math.max(0, Math.min(100, awake)) / 100;
+  const leftAwake = awake >= 45; // the asleep eye opens
+  const hyped = awake >= 85; // soft smile + full glow
+  const eyeOpen = Math.max(0, Math.min(1, (awake - 45) / 40)); // 0 -> 1 as the left eye wakes
+
   return (
-    <svg viewBox="0 0 512 512" role="img" aria-label="the NPC — tap to wake her">
+    <svg viewBox="0 0 512 512" role="img" aria-label="Kamiko — tap to wake her">
       <defs>
-        <linearGradient id="npcHead" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#4a4a5c" />
-          <stop offset="100%" stopColor="#2c2c3a" />
+        <radialGradient id="kamiHalo" cx="50%" cy="42%" r="60%">
+          <stop offset="0%" stopColor="#00ffa3" stopOpacity="0.9" />
+          <stop offset="55%" stopColor="#8b5cf6" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="kamiHair" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#e7e7f4" />
+          <stop offset="55%" stopColor="#c3c3dd" />
+          <stop offset="100%" stopColor="#9a9ac0" />
         </linearGradient>
+        <linearGradient id="kamiHairShade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#b7b7d6" />
+          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.65" />
+        </linearGradient>
+        <linearGradient id="kamiSkin" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#ffe7db" />
+          <stop offset="100%" stopColor="#f6cdbc" />
+        </linearGradient>
+        <radialGradient id="kamiGreen" cx="42%" cy="34%" r="72%">
+          <stop offset="0%" stopColor="#c6fff0" />
+          <stop offset="42%" stopColor="#00ffa3" />
+          <stop offset="100%" stopColor="#00b478" />
+        </radialGradient>
+        <radialGradient id="kamiViolet" cx="42%" cy="34%" r="72%">
+          <stop offset="0%" stopColor="#e6dcff" />
+          <stop offset="42%" stopColor="#8b5cf6" />
+          <stop offset="100%" stopColor="#5b32c0" />
+        </radialGradient>
         <filter id="npcGlow" x="-80%" y="-80%" width="260%" height="260%">
-          <feGaussianBlur stdDeviation="10" result="b" />
+          <feGaussianBlur stdDeviation="8" result="b" />
           <feMerge>
             <feMergeNode in="b" />
             <feMergeNode in="SourceGraphic" />
@@ -149,35 +179,95 @@ export function NpcFace({ awake }: { awake: number }) {
       </defs>
 
       {/* awakening halo, brighter as she wakes */}
-      <ellipse cx="256" cy="150" rx="220" ry="130" fill="#00ffa3" opacity={0.05 + (awake / 100) * 0.16} />
+      <circle cx="256" cy="212" r="200" fill="url(#kamiHalo)" opacity={0.18 + a * 0.5} />
 
-      {/* blocky NPC head */}
-      <rect x="140" y="150" width="232" height="232" rx="34" fill="url(#npcHead)" stroke="#1c1c2e" strokeWidth="6" />
-      <rect x="140" y="150" width="232" height="46" rx="34" fill="#565669" opacity="0.5" />
+      {/* hair — back layer framing the bust */}
+      <path
+        d="M256 78 C158 78 120 168 120 262 C120 344 132 404 150 452 L200 452 C176 402 168 344 172 288 C150 300 138 292 140 268 C160 176 196 128 256 128 C316 128 352 176 372 268 C374 292 362 300 340 288 C344 344 336 402 312 452 L362 452 C380 404 392 344 392 262 C392 168 354 78 256 78 Z"
+        fill="url(#kamiHair)"
+        stroke="#8b5cf6"
+        strokeOpacity={0.25 + a * 0.4}
+        strokeWidth="3"
+      />
 
-      {/* left eye: asleep flat line -> glowing eye */}
+      {/* neck + shoulders */}
+      <path d="M226 328 h60 v40 c34 8 58 30 66 84 H160 c8 -54 32 -76 66 -84 Z" fill="url(#kamiSkin)" />
+      <path d="M160 452 c8 -54 32 -76 66 -84 v-6 h60 v6 c34 8 58 30 66 84 Z" fill="#12122a" opacity="0.0" />
+
+      {/* face */}
+      <path
+        d="M256 150 C312 150 344 192 344 244 C344 306 306 360 256 360 C206 360 168 306 168 244 C168 192 200 150 256 150 Z"
+        fill="url(#kamiSkin)"
+      />
+
+      {/* soft face shading on the right side */}
+      <path d="M330 220 C342 250 336 300 300 340 C332 300 336 258 322 224 Z" fill="#e9b6a2" opacity="0.5" />
+
+      {/* blush — flushes as she wakes */}
+      <ellipse cx="206" cy="292" rx="20" ry="11" fill="#ff7eb6" opacity={0.28 + a * 0.35} />
+      <ellipse cx="306" cy="292" rx="20" ry="11" fill="#ff7eb6" opacity={0.28 + a * 0.35} />
+
+      {/* front hair / bangs framing the face */}
+      <path
+        d="M168 250 C160 176 200 120 256 120 C312 120 352 176 344 250 C332 206 312 188 296 214 C288 180 272 172 256 172 C240 172 224 180 216 214 C200 188 180 206 168 250 Z"
+        fill="url(#kamiHair)"
+      />
+      <path d="M256 122 c22 -6 40 6 44 24 c-16 -10 -30 -8 -44 -2 Z" fill="url(#kamiHairShade)" opacity="0.85" />
+      {/* ahoge — the little cute strand */}
+      <path
+        d="M256 96 c14 -20 34 -20 46 -8 c-16 -2 -26 4 -30 16"
+        fill="none"
+        stroke="url(#kamiHair)"
+        strokeWidth="8"
+        strokeLinecap="round"
+      />
+
+      {/* eyebrows */}
+      <path d="M188 224 q22 -12 44 -4" fill="none" stroke="#b1b1cf" strokeWidth="6" strokeLinecap="round" />
+      <path d="M280 220 q22 -8 44 4" fill="none" stroke="#b1b1cf" strokeWidth="6" strokeLinecap="round" />
+
+      {/* RIGHT eye — always open, violet (the heterochromatic partner) */}
+      <ellipse cx="300" cy="256" rx="26" ry="30" fill="#f4fbff" />
+      <ellipse cx="302" cy="258" rx="18" ry="22" fill="url(#kamiViolet)" filter="url(#npcGlow)" />
+      <circle cx="302" cy="260" r="8" fill="#1a1030" />
+      <circle cx="295" cy="250" r="6" fill="#ffffff" opacity="0.95" />
+      <path d="M272 236 q28 -12 54 2" fill="none" stroke="#3a2c1f" strokeWidth="7" strokeLinecap="round" />
+
+      {/* LEFT eye — asleep lash line that OPENS into a glowing neon-green eye as she wakes */}
       {leftAwake ? (
+        <g opacity={0.35 + eyeOpen * 0.65}>
+          <ellipse cx="212" cy="256" rx="26" ry={12 + eyeOpen * 18} fill="#f4fbff" />
+          <ellipse
+            cx="210"
+            cy="258"
+            rx="18"
+            ry={Math.max(8, 8 + eyeOpen * 14)}
+            fill="url(#kamiGreen)"
+            filter="url(#npcGlow)"
+          />
+          <circle cx="210" cy="260" r={4 + eyeOpen * 4} fill="#08281d" />
+          <circle cx="203" cy="250" r="6" fill="#ffffff" opacity="0.95" />
+          <path d="M186 236 q28 -12 54 2" fill="none" stroke="#3a2c1f" strokeWidth="7" strokeLinecap="round" />
+        </g>
+      ) : (
         <>
-          <circle cx="204" cy="262" r="22" fill="#00ffa3" filter="url(#npcGlow)" />
-          <circle cx="204" cy="262" r="9" fill="#eafff6" />
+          <path d="M186 258 q26 16 52 0" fill="none" stroke="#3a2c1f" strokeWidth="7" strokeLinecap="round" />
+          <path d="M190 266 l-6 8 M212 270 l0 9 M234 266 l6 8" stroke="#3a2c1f" strokeWidth="4" strokeLinecap="round" />
         </>
-      ) : (
-        <rect x="174" y="256" width="60" height="12" rx="6" fill="#8a8a9c" />
       )}
 
-      {/* right eye: already woke */}
-      <circle cx="308" cy="262" r="22" fill="#00ffa3" filter="url(#npcGlow)" />
-      <circle cx="308" cy="262" r="9" fill="#eafff6" />
+      {/* nose hint */}
+      <path d="M254 288 q6 6 0 12" fill="none" stroke="#e0a894" strokeWidth="4" strokeLinecap="round" />
 
-      {/* mouth: flat neutral -> slight upturn when hyped */}
+      {/* mouth — soft neutral -> gentle smile when hyped */}
       {hyped ? (
-        <path d="M206 330 q50 34 100 0" stroke="#00ffa3" strokeWidth="12" strokeLinecap="round" fill="none" />
+        <path d="M232 320 q24 26 48 0 q-24 10 -48 0 Z" fill="#c94b6e" stroke="#a83354" strokeWidth="3" />
       ) : (
-        <rect x="214" y="330" width="84" height="10" rx="5" fill="#20202c" />
+        <path d="M240 322 q16 10 32 0" fill="none" stroke="#c05b74" strokeWidth="6" strokeLinecap="round" />
       )}
 
-      {/* status LED */}
-      <circle cx="344" cy="196" r="7" fill="#00ffa3" opacity={hyped ? 1 : 0.75} />
+      {/* neon awakening accent — a small status spark that lifts with awakeness */}
+      <circle cx="256" cy="118" r={3 + a * 3} fill="#00ffa3" opacity={0.4 + a * 0.6} filter="url(#npcGlow)" />
     </svg>
   );
 }

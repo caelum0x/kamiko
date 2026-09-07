@@ -2,7 +2,7 @@ const CopyPlugin = require("copy-webpack-plugin");
 const withPWA = require("@ducanh2912/next-pwa").default({
   dest: "public",
   /*
-   * The $NPC streak-saver push handlers. next-pwa compiles worker/index.js and imports it into the
+   * The $KAMIKO streak-saver push handlers. next-pwa compiles worker/index.js and imports it into the
    * service worker it generates, so the push/notificationclick listeners ship INSIDE the same
    * /sw.js that already does amica's offline caching.
    *

@@ -1,5 +1,5 @@
 /**
- * trust.tsx — the verification report a stranger reads before touching $NPC, as an amica route.
+ * trust.tsx — the verification report a stranger reads before touching $KAMIKO, as an amica route.
  *
  * This is the money-safety surface, wired to OUR on-chain verifier: it GETs /trust from game-api
  * through the bridge proxy (NEXT_PUBLIC_NPC_API). Every rule is fail-closed, because being wrong here
@@ -111,13 +111,13 @@ export default function TrustPage() {
 
   return (
     <div className="npct-root">
-      <Head><title>$NPC — trust</title></Head>
+      <Head><title>$KAMIKO — trust</title></Head>
       {/* raw-text element — see agents.tsx: a text child is SSR entity-escaped (`>` → `&gt;`) and
           never un-escaped, breaking child-combinator rules pre-hydration and mismatching hydration. */}
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="npct-wrap">
         <header className="npct-head">
-          <div className="npct-logo">$<b>NPC</b> <span>/ trust</span></div>
+          <div className="npct-logo">$<b>KAMIKO</b> <span>/ trust</span></div>
           <a href="/game" className="npct-back">← game</a>
         </header>
 
@@ -185,7 +185,7 @@ export default function TrustPage() {
         )}
 
         <div className="npct-fine"><b style={{ color: '#e8e8f2' }}>NOT FINANCIAL ADVICE.</b> This is a verification report, not an
-          audit and not a safety rating. A clean report does not stop $NPC going to zero — most memecoins do. Only risk what you can lose.</div>
+          audit and not a safety rating. A clean report does not stop $KAMIKO going to zero — most memecoins do. Only risk what you can lose.</div>
       </div>
     </div>
   );

@@ -121,8 +121,8 @@ describe('parseAgentDetail', () => {
     expect(d!.pledgeSigner).toBe('Signer111');
   });
   test('reads the character-kit shape the registry actually admits (persona.system as string[])', () => {
-    const d = parseAgentDetail({ ...AGENT_ROW, character: { persona: { system: ['You are $NPC.', 'Stay safe.'] } } });
-    expect(d!.about).toBe('You are $NPC. Stay safe.');
+    const d = parseAgentDetail({ ...AGENT_ROW, character: { persona: { system: ['You are $KAMIKO.', 'Stay safe.'] } } });
+    expect(d!.about).toBe('You are $KAMIKO. Stay safe.');
   });
   test('array bios join, non-strings are ignored, absence is null', () => {
     const d = parseAgentDetail({ ...AGENT_ROW, character: { bio: ['line one', 7, 'line two'] } });

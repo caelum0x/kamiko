@@ -1,7 +1,7 @@
 # airi, merged into amica
 
 The framework-agnostic TypeScript of apps/airi (MIT, https://github.com/moeru-ai/airi), copied here
-so $NPC gains airi's capabilities on the amica (React) foundation. Each package's `@proj-airi/*`
+so $KAMIKO gains airi's capabilities on the amica (React) foundation. Each package's `@proj-airi/*`
 imports are repointed at the sibling merged copy; third-party deps are declared in
 apps/vtuber-amica/package.json at airi's catalog versions.
 

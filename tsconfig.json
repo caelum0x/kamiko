@@ -13,7 +13,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     /*
-     * The merged airi tree and the $NPC funnel modules both import with explicit ".ts" extensions —
+     * The merged airi tree and the $KAMIKO funnel modules both import with explicit ".ts" extensions —
      * that is how upstream airi is written, and keeping it makes the port diffable against upstream.
      * Without this flag every one of those imports is a TS5097 that fails `next build` (strict, no
      * typescript.ignoreBuildErrors). Legal here because this config already sets noEmit: tsc is only

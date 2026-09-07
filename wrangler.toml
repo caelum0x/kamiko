@@ -1,4 +1,4 @@
-# kamiko.fun — the live $NPC VTuber web app.
+# kamiko.fun — the live $KAMIKO VTuber web app.
 #
 # This REPLACES the old static text landing (infra/deploy/kamiko-site). It serves the real
 # front end (apps/vtuber-amica) as a Next.js static export: the 3D VRM character stage and the

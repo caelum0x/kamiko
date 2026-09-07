@@ -8,7 +8,7 @@
  *
  * Because /import/[sqid] imports it at the top level, that throw happened during `next build`'s page
  * data collection — so THE WHOLE FRONT END FAILED TO BUILD unless Supabase credentials were present.
- * $NPC does not use amica's character-sharing cloud at all, which means the product could not be
+ * $KAMIKO does not use amica's character-sharing cloud at all, which means the product could not be
  * built for its own deployment because of a feature it does not ship.
  *
  * Now the client is created lazily and only when both variables are actually set. `getSupabase()`

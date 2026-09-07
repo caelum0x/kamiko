@@ -1,7 +1,7 @@
 /**
  * airiQueue.spec.ts — the one local divergence from upstream airi's stream-kit queue.
  *
- * It lives beside the other $NPC funnel specs rather than next to src/utils/airiQueue.ts because it
+ * It lives beside the other $KAMIKO funnel specs rather than next to src/utils/airiQueue.ts because it
  * is not a test OF upstream's queue — upstream ships its own suite. It pins the ONE behaviour this
  * repo added on top: `clear()` hands the undrained items back, which is what makes game.tsx's
  * unmount comment ("an unmount mid-flush must not silently lose taps the player made") true. Before

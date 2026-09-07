@@ -19,7 +19,7 @@
  *
  * The tip destination is CONFIGURATION ONLY (src/npc/config.ts). It is never read from the URL: a
  * `?tip=` parameter would build and sign a REAL mainnet transfer to a stranger while the page said
- * the user had tipped $NPC — and npc-api would then refuse to credit it, because it verifies the
+ * the user had tipped $KAMIKO — and npc-api would then refuse to credit it, because it verifies the
  * destination. A money destination never comes from a link someone sent you.
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
@@ -181,7 +181,7 @@ export default function HolderPage() {
       return;
     }
     setTopicBusy(true);
-    setTopicMsg('checking your $NPC balance on-chain…');
+    setTopicMsg('checking your $KAMIKO balance on-chain…');
     try {
       const res = await fetch(API + '/perk', {
         method: 'POST',
@@ -400,14 +400,14 @@ export default function HolderPage() {
 
   return (
     <div className="npcg-root">
-      <Head><title>$NPC — holder dashboard</title></Head>
+      <Head><title>$KAMIKO — holder dashboard</title></Head>
       {/* raw-text element — see agents.tsx: a text child is SSR entity-escaped (`>` → `&gt;`) and
           never un-escaped, breaking `.npcg-bar>span` pre-hydration and mismatching hydration. */}
       <style dangerouslySetInnerHTML={{ __html: NPC_CSS }} />
 
       <div className="npcg-wrap">
         <header className="npcg-head">
-          <div className="npcg-logo">$<b>NPC</b></div>
+          <div className="npcg-logo">$<b>KAMIKO</b></div>
           <span className="npcg-ca">holder dashboard</span>
         </header>
 
@@ -437,7 +437,7 @@ export default function HolderPage() {
             <div className="npcg-perks">
               {me?.tier
                 ? (me.tier.perks || []).map((p) => <span key={p} className="npcg-perk">{p}</span>)
-                : <span className="npcg-muted">public chat — a tier appears once $NPC is live on-chain and your balance can be read.</span>}
+                : <span className="npcg-muted">public chat — a tier appears once $KAMIKO is live on-chain and your balance can be read.</span>}
             </div>
             <div className="npcg-grid">
               <Stat k="WAKES" v={(me?.taps || 0).toLocaleString()} />
@@ -559,7 +559,7 @@ export default function HolderPage() {
 
         <p className="npcg-fine">
           Tips are voluntary and non-refundable. They buy no share, no claim and no promise — they are
-          a tip to a character on a stream. $NPC is a meme collectible for entertainment, not an
+          a tip to a character on a stream. $KAMIKO is a meme collectible for entertainment, not an
           investment, and nothing here is financial advice.
         </p>
       </div>

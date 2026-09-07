@@ -1,5 +1,5 @@
 /**
- * config.ts — the runtime configuration every $NPC funnel surface inside amica reads, resolved once.
+ * config.ts — the runtime configuration every $KAMIKO funnel surface inside amica reads, resolved once.
  *
  * Amica is entirely env-configured (Next.js inlines NEXT_PUBLIC_* at build time) and
  * tooling/scripts/amica-preset.ts is what writes these into .env.local from the project's own
@@ -12,7 +12,7 @@
  *
  *   - THE TIP DESTINATION IS CONFIGURATION ONLY. It is never read from the URL. The old holder page
  *     accepted `?tip=`, so `holder?tip=<attacker>` built and signed a REAL mainnet transfer to a
- *     stranger while the page said the user had tipped $NPC — and npc-api then refused to credit it,
+ *     stranger while the page said the user had tipped $KAMIKO — and npc-api then refused to credit it,
  *     because it verifies the destination. The victim lost the SOL and got nothing.
  *   - AN UNPARSEABLE VALUE IS "NOT CONFIGURED", never "close enough". A tip address that is not
  *     base58 leaves tipping OFF with a reason on screen, which is what services/game-api's own

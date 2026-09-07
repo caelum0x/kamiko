@@ -210,7 +210,7 @@ export default function MessageInput({
   }
 
   return (
-    <div className="fixed bottom-2 z-20 w-full">
+    <div className="fixed bottom-7 z-20 w-full">
       <div className="mx-auto max-w-4xl p-2 backdrop-blur-lg border-0 rounded-lg">
         <div className="grid grid-flow-col grid-cols-[min-content_1fr_min-content] gap-[8px]">
           <div>

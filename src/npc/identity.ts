@@ -1,5 +1,5 @@
 /**
- * identity.ts — who the visitor is, and the ONE wallet handshake every $NPC surface uses.
+ * identity.ts — who the visitor is, and the ONE wallet handshake every $KAMIKO surface uses.
  *
  * Two identities, on purpose:
  *   - a DEVICE id, minted locally, so a tapper with no wallet is still a real, resumable player;
@@ -31,7 +31,7 @@ import { API, apiDeadline } from './config.ts';
  * hex characters. If that sentence ever changes, this refuses every login until it is changed here
  * too, which is the correct direction to fail.
  */
-export const AUTH_MESSAGE_RE = /^\$NPC — sign to prove this wallet is yours\.\nnonce: ([0-9a-f]{16,64})$/;
+export const AUTH_MESSAGE_RE = /^\$KAMIKO — sign to prove this wallet is yours\.\nnonce: ([0-9a-f]{16,64})$/;
 
 /** The header npc-api reads the session token from (services/game-api/auth.ts SESSION_HEADER). */
 export const SESSION_HEADER = 'x-npc-session';
@@ -174,7 +174,7 @@ export async function connectWallet(p: WalletProvider): Promise<ConnectResult> {
   // bytes reach the wallet: after `signMessage` resolves the signature exists and the damage, if
   // there was any, is done.
   const match = AUTH_MESSAGE_RE.exec(message);
-  if (!match) throw new Error('the api asked this wallet to sign something that is not the $NPC login message — refused');
+  if (!match) throw new Error('the api asked this wallet to sign something that is not the $KAMIKO login message — refused');
 
   const signed = await p.signMessage(new TextEncoder().encode(message), 'utf8');
   const verifyRes = await fetch(API + '/auth/verify', {

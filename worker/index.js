@@ -1,5 +1,5 @@
 /*
- * $NPC service worker — renders streak-saver push notifications and focuses the game on click.
+ * $KAMIKO service worker — renders streak-saver push notifications and focuses the game on click.
  *
  * The payload shape is exactly what services/game-api/push.ts sends
  * ({ title, body, url } — see `nudgeMessage` and `NudgeSender`), and every field has a fallback:
@@ -17,7 +17,7 @@
  * amica's PWA registration outright, which is why src/npc/push.ts registers '/sw.js' and nothing else.
  */
 self.addEventListener('push', (event) => {
-  const data = { title: '👁️ $NPC', body: 'come wake her', url: '/game' };
+  const data = { title: '👁️ $KAMIKO', body: 'come wake her', url: '/game' };
   try {
     if (event.data) {
       const j = event.data.json();

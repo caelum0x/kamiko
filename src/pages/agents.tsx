@@ -141,7 +141,7 @@ export default function AgentsPage() {
 
   return (
     <div className="npcg-root npca-root">
-      <Head><title>$NPC — agents</title></Head>
+      <Head><title>$KAMIKO — agents</title></Head>
       {/* dangerouslySetInnerHTML, not a text child: <style> is a raw-text element, so React's SSR
           entity-escaping (`>` → `&gt;` in `.npcg-bar>span`) is never un-escaped by the HTML parser —
           the child-combinator rule is dead until hydration AND the text mismatch makes React throw
@@ -150,7 +150,7 @@ export default function AgentsPage() {
       <style dangerouslySetInnerHTML={{ __html: NPC_CSS + AGENTS_CSS }} />
       <div className="npcg-wrap npca-wrap">
         <header className="npcg-head">
-          <div className="npcg-logo">$<b>NPC</b> <span className="npca-sub">/ agents</span></div>
+          <div className="npcg-logo">$<b>KAMIKO</b> <span className="npca-sub">/ agents</span></div>
           <a href="/game" className="npca-back">← game</a>
         </header>
 
