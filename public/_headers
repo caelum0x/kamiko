@@ -1,0 +1,5 @@
+# Never let the service worker script be cached by the browser or the edge, so a returning
+# visitor always revalidates /sw.js and immediately picks up the kill-switch that retires the
+# old (stale, route-changing) precache worker.
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate

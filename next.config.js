@@ -2,6 +2,15 @@ const CopyPlugin = require("copy-webpack-plugin");
 const withPWA = require("@ducanh2912/next-pwa").default({
   dest: "public",
   /*
+   * kamiko.fun ships as a single-page consumer site with no offline PWA. An earlier build registered
+   * a workbox precache service worker that could keep serving a STALE app shell (old navigation) to
+   * returning browsers. For that deploy we set NEXT_PUBLIC_KILL_SW=true, which DISABLES next-pwa so
+   * no workbox SW is generated; the deploy then drops a self-destructing kill-switch at /sw.js
+   * (killswitch-sw.js) that unregisters the old SW, purges its caches, and reloads open tabs. The
+   * full-stack build (push/streak-saver) leaves this unset and keeps the customWorker SW below.
+   */
+  disable: process.env.NEXT_PUBLIC_KILL_SW === "true",
+  /*
    * The $KAMIKO streak-saver push handlers. next-pwa compiles worker/index.js and imports it into the
    * service worker it generates, so the push/notificationclick listeners ship INSIDE the same
    * /sw.js that already does amica's offline caching.

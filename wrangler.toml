@@ -6,11 +6,16 @@
 # in-character "opens at launch" line (NEXT_PUBLIC_CHATBOT_BACKEND=preflight) and on-chain tips
 # stay off until the Solana/game-api bridge is configured — nothing is a dead screen.
 #
-# Build (from apps/vtuber-amica), then deploy from here:
-#   NEXT_OUTPUT=export NEXT_PUBLIC_NPC_API= NEXT_PUBLIC_NPC_REGISTRY= NEXT_PUBLIC_NPC_TIP_WALLET= \
-#     NEXT_PUBLIC_VRM_HASH=/vrm/AvatarSample_B.vrm NEXT_PUBLIC_CHATBOT_BACKEND=preflight \
-#     NEXT_PUBLIC_SHOW_INTRODUCTION=false NEXT_PUBLIC_SHOW_ADD_TO_HOMESCREEN=false npm run build
-#   npx wrangler deploy
+# Build + deploy (from apps/vtuber-amica) with ONE command:
+#   npm run deploy:site
+#
+# That runs `build:site` (the static export with NEXT_PUBLIC_KILL_SW=true, which DISABLES next-pwa
+# so NO workbox precache service worker is generated, then drops the self-destructing killswitch-sw.js
+# at out/sw.js) and `wrangler deploy`. DO NOT deploy with a bare `npm run build` + `wrangler deploy`:
+# that re-enables next-pwa and reintroduces the stale-bundle precache SW that made returning browsers
+# keep serving the old (route-changing) app. The /sw.js killswitch + public/_headers (no-cache on
+# /sw.js) retire that worker on every returning browser. Env for the build lives in package.json's
+# build:site script.
 #
 # Reuses the worker name "kamiko-site" so the already-active kamiko.fun custom domain + DNS carry
 # over with no registrar/nameserver step.
