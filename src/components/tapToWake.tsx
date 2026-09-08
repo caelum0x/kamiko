@@ -129,6 +129,22 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
   const tapSignalRef = useRef(onTapSignal);
   tapSignalRef.current = onTapSignal;
 
+  /*
+   * A COMPLETED QUEST IS FELT HERE TOO.
+   *
+   * useNpcBoard reports what finished while somebody was watching, and /game floats a "✨ QUEST
+   * DONE" for it. The panel was rendering the quest LIST and nothing else, so on the avatar screen
+   * — the one the player is actually on — a reward fired silently: the row just quietly turned
+   * into a tick. She says it instead, which is the whole reason the game moved onto her screen.
+   */
+  useEffect(() => {
+    if (!board.justCompleted.length) return;
+    const done = board.quests?.list.find((q) => q.id === board.justCompleted[0]);
+    const label = done?.label ?? 'a quest';
+    setLine(`✨ ${label} — done.`);
+    speakRef.current?.(`${label}. done.`);
+  }, [board.justCompleted, board.quests]);
+
   const onTap = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       tap();
@@ -154,7 +170,18 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
   const pct = Math.round(awake);
 
   return (
-    <div className="fixed bottom-20 right-4 z-20 w-64 rounded-2xl bg-black/70 p-4 text-white backdrop-blur-sm">
+    /*
+      BOUNDED AND SCROLLABLE. The panel grew from a tap surface into the whole dashboard —
+      leaderboard, quests, level, contract — and it is anchored at the bottom, so it grows UPWARD.
+      Without a ceiling it runs off the top of a laptop viewport and the contract line, which is the
+      part that matters most, is the part that goes off screen. 70vh keeps the stage visible behind
+      it, which is the entire reason the game is here instead of on /game.
+    */
+    <div
+      role="dialog"
+      aria-label="tap to wake her — the $NPC clicker"
+      className="fixed bottom-20 right-4 z-20 flex max-h-[70vh] w-64 flex-col overflow-y-auto overscroll-contain rounded-2xl bg-black/70 p-4 text-white backdrop-blur-sm"
+    >
       <div className="flex items-center justify-between">
         <span className="text-xs uppercase tracking-widest opacity-70">tap to wake her</span>
         <button onClick={onClose} aria-label="close the tap panel" className="px-1 text-lg leading-none opacity-70 hover:opacity-100">
@@ -163,13 +190,20 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
       </div>
 
       {/* The wake meter. `pct` is the same 0..100 the /game dashboard shows, from the same engine. */}
-      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/20">
+      <div
+        role="progressbar"
+        aria-label="how awake she is"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        className="mt-3 h-2 w-full shrink-0 overflow-hidden rounded-full bg-white/20"
+      >
         <div className="h-full rounded-full bg-white transition-[width] duration-200" style={{ width: `${pct}%` }} />
       </div>
 
       <button
         onClick={onTap}
-        aria-label="tap"
+        aria-label={`tap to wake her — ${pct}% awake, ${taps} taps`}
         className="relative mt-3 h-20 w-full select-none overflow-hidden rounded-xl bg-white/10 text-3xl active:scale-95"
       >
         {pct < 15 ? '😐' : pct < 50 ? '😳' : pct < 85 ? '🤯' : '😈'}
@@ -200,7 +234,10 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
       </div>
       {streak ? <div className="mt-1 text-xs opacity-70">streak: {streak.streak}d (best {streak.best})</div> : null}
 
-      {line ? <p className="mt-2 border-t border-white/15 pt-2 text-xs italic opacity-80">{line}</p> : null}
+      {/* aria-live: her line is the panel's only narrative output, and it changes on its own. */}
+      <p aria-live="polite" className={'mt-2 border-t border-white/15 pt-2 text-xs italic opacity-80' + (line ? '' : ' sr-only')}>
+        {line ?? ''}
+      </p>
 
       {/* ── THE DASHBOARD, IN PLACE ────────────────────────────────────────────────────────── */}
 

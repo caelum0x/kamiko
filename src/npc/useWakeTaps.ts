@@ -36,8 +36,14 @@ import { createQueue } from '../utils/airiQueue.ts';
 import { API, MAX_BACKOFF_MS, apiDeadline, readJson } from './config.ts';
 import { TZ, deviceId, questId, readLocal, removeLocal, walletId, writeLocal } from './identity.ts';
 
-/** Taps counted locally that /wake has not accepted yet, parked across a page unload. */
-export const UNSENT_KEY = 'npc_unsent';
+/**
+ * Taps counted locally that /wake has not accepted yet, parked across a page unload.
+ *
+ * Not exported: nothing outside this module may read or write it. The key is half of a recovery
+ * protocol — read once, erased immediately, re-written only on unmount — and a second writer would
+ * turn that recovery into an inflation of the one number this product promises is the server's.
+ */
+const UNSENT_KEY = 'npc_unsent';
 
 /**
  * The ceiling on what ONE restore may add to the global counter. Not a storage concern: anything

@@ -303,3 +303,49 @@ describe('tapping actually wakes her', () => {
     expect(index).toMatch(/chatSpeaking/);
   });
 });
+
+/**
+ * THE PANEL IS AN OVERLAY ON THE STAGE, which imposes two requirements the page version never had.
+ *
+ * It is anchored at the bottom and grows UPWARD, so an unbounded panel runs off the top of a laptop
+ * viewport — and the part that goes off screen first is the contract line, which is the part that
+ * matters most. And it floats over the avatar rather than being a page, so a screen reader needs to
+ * be told what it is; a div of emoji and numbers announces nothing.
+ *
+ * I claimed "scoped and scrollable" in a commit message before either was true. These assert it.
+ */
+describe('the overlay is bounded and announced', () => {
+  const panelSrc = sourceKeepingLiterals(read('src/components/tapToWake.tsx'));
+
+  it('has a height ceiling and scrolls, so no row is unreachable', () => {
+    expect(panelSrc).toMatch(/max-h-\[/);
+    expect(panelSrc).toMatch(/overflow-y-auto/);
+  });
+
+  it('announces itself as a dialog with a name', () => {
+    expect(panelSrc).toMatch(/role="dialog"/);
+    expect(panelSrc).toMatch(/aria-label=/);
+  });
+
+  it('the wake meter is a progressbar with a value, not a decorated div', () => {
+    expect(panelSrc).toMatch(/role="progressbar"/);
+    expect(panelSrc).toMatch(/aria-valuenow=/);
+  });
+
+  it('her line is a live region — it changes on its own and nobody is looking', () => {
+    expect(panelSrc).toMatch(/aria-live=/);
+  });
+
+  it('a completed quest is felt here, not only on /game', () => {
+    // The panel rendered the quest LIST and nothing else, so a reward fired silently: the row just
+    // turned into a tick. On the surface the player is actually on, she says it.
+    //
+    // The identifier ALONE is not the check — that was the first version of this test, and it
+    // survived a sabotage that replaced the guard with `false`, because `board.justCompleted` still
+    // appeared in the effect's dependency array. What is asserted is the GUARD and the reaction.
+    const src = codeOnly(read('src/components/tapToWake.tsx'));
+    expect(src).toMatch(/justCompleted\.length/);
+    const at = src.indexOf('justCompleted.length');
+    expect(src.slice(at, at + 500)).toMatch(/speakRef\.current/);
+  });
+});
