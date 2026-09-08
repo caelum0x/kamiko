@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWakeTaps, type WakeMood } from '@/npc/useWakeTaps';
 import { useNpcBoard } from '@/npc/useNpcBoard';
+import { useWalletLink } from '@/npc/useWalletLink';
 import { shortAddr } from '@/npc/identity';
 
 /** One drifting "+1" over the point that was tapped. */
@@ -87,7 +88,7 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
   }, []);
 
   const engine = useWakeTaps({ onGreeting });
-  const { configured, taps, awake, global, streak, level, mood, tap, ready, throttledNow, backOff, wallet, device } = engine;
+  const { configured, taps, awake, global, streak, level, mood, tap, ready, throttledNow, backOff, wallet, setWallet, device } = engine;
 
   /*
    * THE DASHBOARD IS HERE, NOT ONE NAVIGATION AWAY.
@@ -99,6 +100,18 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
    * hook's throttle brake, because every call both hooks make comes out of one per-client bucket.
    */
   const board = useNpcBoard({ throttledNow, backOff, ready, wallet, device });
+
+  /*
+   * THE WALLET AND THE STREAK SAVER, so this is the whole funnel and not most of it.
+   *
+   * Without these the panel shows a leaderboard the player has no way to claim their place on, and
+   * a streak with no way to be reminded of it — the revenue and retention halves left behind on a
+   * page nothing links to any more. Shared with /game (src/npc/useWalletLink.ts), because the rule
+   * that guest taps are claimed with a SESSION and never a bare public key is not a rule worth
+   * having two copies of.
+   */
+  const { walletMsg, connect, pushOffer, pushArmed, pushMsg, armStreakSaver } =
+    useWalletLink({ device, wallet, setWallet, onLinked: board.refreshQuests });
 
   /**
    * Drive her expression from the meter — ONLY WHEN IT CHANGES.
@@ -328,6 +341,28 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
           <p className="mt-1 text-[11px] opacity-60">no verified contract yet — beware impostors.</p>
         ) : null}
       </div>
+
+      {/* WALLET — the only way a guest's taps become theirs. */}
+      <div className="mt-3 border-t border-white/15 pt-2">
+        {wallet ? (
+          <p className="text-[11px] opacity-70">wallet: {shortAddr(wallet)}</p>
+        ) : (
+          <button onClick={() => void connect()} disabled={!configured} className="w-full rounded-lg bg-white/15 py-1.5 text-[11px] hover:bg-white/25 disabled:opacity-40">
+            connect wallet &amp; claim your taps
+          </button>
+        )}
+        {walletMsg ? <p aria-live="polite" className="mt-1 text-[11px] opacity-70">{walletMsg}</p> : null}
+      </div>
+
+      {/* STREAK SAVER — offered only where it can actually be delivered. */}
+      {pushOffer ? (
+        <div className="mt-2">
+          <button onClick={() => void armStreakSaver()} disabled={pushArmed} className="w-full rounded-lg border border-white/20 py-1 text-[11px] opacity-80 hover:opacity-100 disabled:opacity-40">
+            {pushArmed ? "streak saver armed" : "remind me before my streak lapses"}
+          </button>
+          {pushMsg ? <p aria-live="polite" className="mt-1 text-[11px] opacity-70">{pushMsg}</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

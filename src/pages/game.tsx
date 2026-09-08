@@ -24,6 +24,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useWakeTaps } from '../npc/useWakeTaps.ts';
 import { useNpcBoard, type Quest, type Daily } from '../npc/useNpcBoard.ts';
+import { useWalletLink } from '../npc/useWalletLink.ts';
 
 import { API, apiDeadline, readJson } from '../npc/config.ts';
 import {
@@ -59,11 +60,7 @@ export default function GamePage() {
   const [line, setLine] = useState('// booting…');
   const [dim, setDim] = useState(true);
   const [coach, setCoach] = useState(!readLocal('npc_onboarded'));
-  const [walletMsg, setWalletMsg] = useState('');
   const [floats, setFloats] = useState<Float[]>([]);
-  const [pushOffer, setPushOffer] = useState(false);
-  const [pushArmed, setPushArmed] = useState(false);
-  const [pushMsg, setPushMsg] = useState('');
 
   const floatSeq = useRef(0);
 
@@ -94,20 +91,21 @@ export default function GamePage() {
   const board = useNpcBoard({ throttledNow, backOff, ready, wallet, device });
   const { rows: boardRows, quests, cta, caText, copyCa, justCompleted, refreshQuests } = board;
 
+  /**
+   * The wallet handshake and the streak saver, shared with the avatar-screen panel
+   * (src/npc/useWalletLink.ts). They were the last two pieces of the funnel that existed only
+   * inside this page's render — so the panel could show a leaderboard nobody had a way to claim
+   * their place on.
+   */
+  const link = useWalletLink({ device, wallet, setWallet, onLinked: refreshQuests });
+  const { walletMsg, connect, pushOffer, pushArmed, pushMsg, armStreakSaver } = link;
+
   /** Mirrors the values the callbacks below read on every tick without re-subscribing. */
   const live = useRef({ taps, awake, wallet, global });
   live.current = { taps, awake, wallet, global };
 
-  // Identity, the carried-taps recovery and `ready` are the engine's (useWakeTaps). What is left
-  // here is the push offer, which is this page's alone.
-  useEffect(() => {
-    // Whether the streak saver can be OFFERED at all is a client-side question (browser support, a
-    // configured VAPID key, permission not already denied). Asking for permission is not: that
-    // happens on the button, never on load, because an unprompted permission dialog is penalised by
-    // every browser and outright blocked by some.
-    setPushOffer(pushOfferable());
-    hasSubscription().then(setPushArmed).catch(() => setPushArmed(false));
-  }, []);
+  // Identity and the carried-taps recovery are the engine's (useWakeTaps); the push offer and the
+  // wallet handshake are useWalletLink's. Nothing about either is this page's any more.
 
   const idFor = useCallback(() => questId(live.current.wallet, device), [device]);
 
@@ -185,58 +183,9 @@ export default function GamePage() {
   // copyCa — including the rule that a 'could not copy' message must NOT auto-revert, because
   // a line you have to read the address out of cannot disappear — is useNpcBoard's now.
 
-  const connect = async () => {
-    const p = provider();
-    if (!p) { setWalletMsg('Phantom not found — opening install…'); window.open('https://phantom.app/', '_blank', 'noopener'); return; }
-    let w = '';
-    let session = '';
-    try {
-      setWalletMsg('sign the message to verify…');
-      ({ wallet: w, session } = await connectWallet(p));
-    } catch {
-      setWalletMsg('connect cancelled');
-      return;
-    }
-    setWallet(w);
-    // /claim MOVES SCORE, so it authenticates the session token — never a bare public key, which is
-    // public and printed on the leaderboard. Without a token the connect still stands; the guest
-    // taps just stay on the device id until a session exists.
-    let claimed = 0;
-    if (session) {
-      try {
-        const c = await (await fetch(API + '/claim', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', ...sessionHeaders(session) },
-          signal: apiDeadline(),
-          body: JSON.stringify({ wallet: w, device }),
-        })).json();
-        claimed = Number(c?.claimed) || 0;
-      } catch { /* connect stands; the claim is retried on the next connect */ }
-    }
-    setWalletMsg('✅ ' + shortAddr(w) + ' connected'
-      + (claimed > 0 ? ' · claimed ' + claimed.toLocaleString() + ' taps' : session ? '' : ' · guest taps not claimed'));
-    refreshQuests();
-  };
-
-  /**
-   * The streak-saver: a web push that brings a lapsing player back.
-   *
-   * services/game-api ships the whole server half of this (webpush.ts, push.ts, push-admin.ts) and
-   * nothing ever subscribed, so `push_subs` stayed empty and every sweep found nobody to remind.
-   * The offer only renders when this deployment can actually deliver one — a configured VAPID key,
-   * a supporting browser, permission not already denied — because a subscription minted against the
-   * wrong key is one the server can never push to.
-   */
-  const armStreakSaver = async () => {
-    setPushMsg('asking your browser…');
-    const r = await subscribeToStreakSaver({ wallet: live.current.wallet, device });
-    if (r.ok) {
-      setPushArmed(true);
-      setPushMsg(r.alreadySubscribed ? "✅ still armed — she'll nudge you before your streak lapses." : "✅ armed. she'll nudge you before your streak lapses.");
-    } else {
-      setPushMsg(r.why);
-    }
-  };
+  // connect() and armStreakSaver() — including the rule that guest taps are claimed with a
+  // SESSION and never a bare address, and that permission is asked on the button and never on
+  // load — are useWalletLink's now.
 
   const share = () => {
     const landing = API + '/s?' + idFor();

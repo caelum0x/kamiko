@@ -143,6 +143,34 @@ describe('the front door leads to every funnel surface', () => {
     }
   });
 
+  it('the panel carries the WHOLE funnel, not most of it', () => {
+    /*
+     * "The whole game on the same page" is not the whole game without the button that turns a
+     * device id into a wallet. Without these two the panel shows a leaderboard the player has no
+     * way to claim their place on, and a streak with no way to be reminded of it — the revenue and
+     * retention halves left behind on a page nothing links to any more.
+     */
+    // Each pattern matches a CALL or an invocation, never a bare name: an import line keeps the
+    // identifier alive after the code using it is gone, which is exactly how the first version of
+    // this test passed on a panel whose wallet hook had been replaced with a stub object.
+    const src = codeOnly(read('src/components/tapToWake.tsx'));
+    const needed: Array<[string, RegExp]> = [
+      ['useWalletLink', /\buseWalletLink\s*\(/],
+      ['connect', /connect\s*\(\s*\)/],
+      ['armStreakSaver', /armStreakSaver\s*\(\s*\)/],
+    ];
+    const missing = needed.filter(([, re]) => !re.test(src)).map(([n]) => n);
+    expect(missing.length ? `the panel is missing: ${missing.join(', ')}` : 'whole funnel').toBe('whole funnel');
+  });
+
+  it('the wallet handshake is SHARED, so the session rule has one home', () => {
+    // /claim MOVES SCORE, so it authenticates with the token /auth/verify minted — never a bare
+    // public key, which is printed on the leaderboard. Two copies of that is two chances to
+    // "simplify" it into sending the address.
+    expect(codeOnly(read('src/pages/game.tsx'))).toMatch(/\buseWalletLink\s*\(/);
+    expect(codeOnly(read('src/components/tapToWake.tsx'))).toMatch(/\buseWalletLink\s*\(/);
+  });
+
   it('the dashboard reads are SHARED with /game, not a second copy', () => {
     // The refusals in useNpcBoard are the honest-money rules — a leaderboard that shows real
     // players or nothing, a CTA written by the verifier or not at all. Two copies of those drift,
