@@ -23,16 +23,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useWakeTaps } from '../npc/useWakeTaps.ts';
-import { useNpcBoard, type Quest, type Daily } from '../npc/useNpcBoard.ts';
+import { useNpcBoard } from '../npc/useNpcBoard.ts';
 import { useWalletLink } from '../npc/useWalletLink.ts';
 
-import { API, apiDeadline, readJson } from '../npc/config.ts';
-import {
-  TZ, connectWallet, provider, questId, readLocal,
-  sessionHeaders, shortAddr, writeLocal,
-} from '../npc/identity.ts';
-import type { CtaState } from '../npc/cta.ts';
-import { hasSubscription, pushOfferable, subscribeToStreakSaver } from '../npc/push.ts';
+import { API } from '../npc/config.ts';
+import { questId, readLocal, shortAddr, writeLocal } from '../npc/identity.ts';
 import { NPC_CSS } from '../npc/styles.ts';
 
 /* ------------------------------------------------------------------ *
@@ -89,7 +84,7 @@ export default function GamePage() {
    * always the one nobody is looking at.
    */
   const board = useNpcBoard({ throttledNow, backOff, ready, wallet, device });
-  const { rows: boardRows, quests, cta, caText, copyCa, justCompleted, refreshQuests } = board;
+  const { quests, cta, caText, copyCa, justCompleted, refreshQuests } = board;
 
   /**
    * The wallet handshake and the streak saver, shared with the avatar-screen panel

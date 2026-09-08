@@ -98,7 +98,20 @@ export function useWalletLink({ device, wallet, setWallet, onLinked }: WalletLin
 
   const armStreakSaver = useCallback(async () => {
     setPushMsg('asking your browser…');
-    const r = await subscribeToStreakSaver({ wallet, device });
+    /*
+     * subscribeToStreakSaver documents that it never throws — every failure comes back as a
+     * sentence — and it is true today. The catch is here anyway because this hook now serves two
+     * surfaces, and the cost of being wrong is not an error, it is a BUTTON THAT LIES: the label
+     * would sit on "asking your browser…" forever while an unhandled rejection went to the console
+     * nobody has open. Depending on a comment for that is a worse trade than one line.
+     */
+    let r: Awaited<ReturnType<typeof subscribeToStreakSaver>>;
+    try {
+      r = await subscribeToStreakSaver({ wallet, device });
+    } catch (e) {
+      setPushMsg('could not arm the reminder — ' + (e instanceof Error ? e.message : 'the browser refused'));
+      return;
+    }
     if (r.ok) {
       setPushArmed(true);
       setPushMsg(r.alreadySubscribed

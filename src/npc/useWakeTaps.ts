@@ -223,13 +223,24 @@ export interface WakeTapsOptions {
 export function useWakeTaps(options: WakeTapsOptions = {}): WakeTaps {
   const { onGreeting, meEveryMs = 30_000 } = options;
 
-  const saved = (() => {
+  /*
+   * READ ONCE, not on every render.
+   *
+   * This was a bare IIFE in the component body, so a synchronous localStorage.getItem and a
+   * JSON.parse ran on EVERY render — and this hook re-renders on every tap. On /game that was
+   * merely wasteful. On the avatar screen it is a blocking storage call on the same main thread
+   * that drives the VRM render loop, at whatever rate somebody can click.
+   *
+   * useState's lazy initialiser is the fix rather than a ref, because it is the one form React
+   * guarantees runs exactly once for the life of the component, before the first paint.
+   */
+  const [saved] = useState<{ taps?: number; awake?: number }>(() => {
     try {
       return JSON.parse(readLocal(LOCAL_KEY) || '{}') as { taps?: number; awake?: number };
     } catch {
       return {};
     }
-  })();
+  });
 
   const [taps, setTaps] = useState(saved.taps || 0);
   /** The authoritative tap count for the milestone check — see `tap`. Seeded from the restore. */
