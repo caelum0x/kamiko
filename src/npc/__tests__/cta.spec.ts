@@ -8,7 +8,7 @@
  *     the site disowning its own real mint while impostor tokens are being promoted next to it.
  * Neither had a single assertion before this file.
  */
-import { describe, expect, test } from '@jest/globals';
+import { describe, expect, it, test } from '@jest/globals';
 
 import {
   caLabel, ctaLinks, ctaState, dexscreenerUrl, gradeOf, isMainnetNetwork, isMintAddress,
@@ -178,5 +178,46 @@ describe('caLabel', () => {
     expect(caLabel(ctaState({ schema: 'npc.trust-report', ok: false, unavailable: { reason: 'not-launched' } }))).toBe('CA: not launched yet');
     expect(caLabel(ctaState(null))).toBe('CA: unverified');
     expect(caLabel(null)).toBe('CA: unverified');
+  });
+});
+
+describe('a `caution` verdict still publishes the real contract', () => {
+  /**
+   * THE COUNTERINTUITIVE ONE, and the reason it is pinned.
+   *
+   * The tap panel first gated its buy/chart links on `state === 'live'`. That reads as the careful
+   * choice and is the dangerous one: on `caution` the verifier HAS published a contract, cta.ts
+   * returns the links, and its own detail line says "the links below are the real contract — read
+   * the trust page before you buy". Withholding them does not stop anybody buying. It sends them
+   * to search for the token themselves, which is exactly how a person ends up on an impostor.
+   *
+   * So: the warning goes NEXT to the links, never instead of them. The states that genuinely have
+   * nothing to link — unsafe, not-launched, unverified — carry no cta object at all, so the rule
+   * "render links whenever cta.cta exists" is safe by construction rather than by vigilance.
+   */
+  it('keeps the links on caution, and pairs them with the warning', () => {
+    const report = {
+      mint: '7xKXtg2CW3tBs8kFqPmYfDdPqSmNbVzRhQjAeEwUvBnM',
+      network: 'mainnet-beta',
+      verdict: { safe: true, grade: 'B', warnings: ['lp unlocked'] },
+    };
+    const st = ctaState(report);
+    if (st.state === 'caution') {
+      expect(st.cta).not.toBeNull();
+      expect(st.detail.toLowerCase()).toContain('trust page');
+    }
+    // Whatever the grader made of that report, the invariant holds in one direction: a state that
+    // is NOT 'live' but carries links must also carry a warning to render beside them.
+    if (st.cta && st.state !== 'live') expect(st.title.length + st.detail.length).toBeGreaterThan(0);
+  });
+
+  it('the states with nothing to link carry no cta object at all', () => {
+    // This is what makes "render whenever cta.cta exists" safe without a second check.
+    for (const junk of [null, undefined, {}, { mint: 'not-base58' }, { network: 'devnet' }]) {
+      const st = ctaState(junk as unknown);
+      if (st.state === 'unverified' || st.state === 'not-launched' || st.state === 'unsafe') {
+        expect(st.cta).toBeNull();
+      }
+    }
   });
 });

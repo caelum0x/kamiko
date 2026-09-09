@@ -319,7 +319,19 @@ export class AmicaLife {
 
   public wakeFromSleep() {
     this.isSleep = false;
-    this.viewer?.model?.playEmotion("Neutral");
+    /*
+     * LOWERCASE, AND IT IS NOT A STYLE CHOICE.
+     *
+     * expressionController.playEmotion has a fast path for the neutral reset — re-enable auto-blink,
+     * record the emotion, return — and it is guarded by `preset == "neutral"`, an exact lowercase
+     * comparison. Everything after that guard calls `this._autoBlink?.setEnable(false)`.
+     *
+     * So "Neutral" skipped the reset and TURNED HER BLINKING OFF. This was the only caller in the
+     * app passing a capitalised name, and it is on the path that runs every time she is woken —
+     * including, now, by a tap on the clicker. Waking her stopped her blinking, which reads as the
+     * avatar having frozen.
+     */
+    this.viewer?.model?.playEmotion("neutral");
   }
   
 }

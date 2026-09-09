@@ -1,36 +1,75 @@
 import {
+  Fragment,
+  useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
+import { useRouter } from "next/router";
+import { Menu, Transition } from '@headlessui/react'
 import { clsx } from "clsx";
 import { M_PLUS_2, Montserrat } from "next/font/google";
+import { useTranslation, Trans } from 'react-i18next';
+import {
+  ChatBubbleLeftIcon,
+  ChatBubbleLeftRightIcon,
+  CloudArrowDownIcon,
+  CodeBracketSquareIcon,
+  CubeIcon,
+  CubeTransparentIcon,
+  LanguageIcon,
+  ShareIcon,
+  SpeakerWaveIcon,
+  SpeakerXMarkIcon,
+  Squares2X2Icon,
+  SquaresPlusIcon,
+  VideoCameraIcon,
+  VideoCameraSlashIcon,
+  WrenchScrewdriverIcon,
+  SignalIcon,
+  AcademicCapIcon,
+  CursorArrowRaysIcon,
+  CurrencyDollarIcon,
+  ShieldCheckIcon,
+} from "@heroicons/react/24/outline";
+import { IconBrain } from '@tabler/icons-react';
 
+import { MenuButton } from "@/components/menuButton";
 import { AssistantText } from "@/components/assistantText";
+import { SubconciousText } from "@/components/subconciousText";
 import { AddToHomescreen } from "@/components/addToHomescreen";
 import { Alert } from "@/components/alert";
 import { UserText } from "@/components/userText";
+import { ChatLog } from "@/components/chatLog";
 import VrmViewer from "@/components/vrmViewer";
 import { MessageInputContainer } from "@/components/messageInputContainer";
 import { Introduction } from "@/components/introduction";
+import { ArbiusIntroduction } from "@/components/arbiusIntroduction";
 import { LoadingProgress } from "@/components/loadingProgress";
+import { DebugPane } from "@/components/debugPane";
+import { Settings } from "@/components/settings";
+import { EmbeddedWebcam } from "@/components/embeddedWebcam";
+import { Moshi } from "@/features/moshi/components/Moshi";
 
 import { ViewerContext } from "@/features/vrmViewer/viewerContext";
 import { Message, Role } from "@/features/chat/messages";
 import { ChatContext } from "@/features/chat/chatContext";
+import { textsToScreenplay } from "@/features/chat/messages";
+import { TapToWake } from "@/components/tapToWake";
 import { AlertContext } from "@/features/alert/alertContext";
 
-import { config, updateConfig } from "@/utils/config";
+import { config, updateConfig } from '@/utils/config';
+import { isTauri } from '@/utils/isTauri';
+import { langs } from '@/i18n/langs';
 import { VrmStoreProvider } from "@/features/vrmStore/vrmStoreContext";
 import { AmicaLifeContext } from "@/features/amicaLife/amicaLifeContext";
+import { ChatModeText } from "@/components/chatModeText";
 
 import { TimestampedPrompt } from "@/features/amicaLife/eventHandler";
 import { handleChatLogs } from "@/features/externalAPI/externalAPI";
+import { VerticalSwitchBox } from "@/components/switchBox";
 import { ThoughtText } from "@/components/thoughtText";
-
-import { useWakeGame } from "@/npc/useWakeGame";
-import { WakeGamePanel } from "@/npc/WakeGamePanel";
-import { NPC_CSS } from "@/npc/styles";
 
 const m_plus_2 = M_PLUS_2({
   variable: "--font-m-plus-2",
@@ -44,13 +83,106 @@ const montserrat = Montserrat({
   subsets: ["latin"],
 });
 
+function detectVRHeadset() {
+  const userAgent = navigator.userAgent.toLowerCase();
+
+  // Meta Quest detection
+  // Quest 2 and 3 both use "oculus" in their user agent
+  const isQuest = userAgent.includes('oculus') ||
+                  userAgent.includes('quest 2') ||
+                  userAgent.includes('quest 3');
+
+  // Vision Pro detection
+  // visionOS is the specific identifier for Apple Vision Pro
+  const isVisionPro = userAgent.includes('visionos') ||
+                      userAgent.includes('xros');
+
+  // Detailed device information
+  let deviceInfo = {
+    isVRDevice: isQuest || isVisionPro,
+    deviceType: '',
+    browserInfo: userAgent
+  };
+
+  if (isQuest) {
+    deviceInfo.deviceType = 'quest-3';
+    if (userAgent.includes('quest 3')) {
+      deviceInfo.deviceType = 'quest-3';
+    } else if (userAgent.includes('quest 2')) {
+      deviceInfo.deviceType = 'quest-2';
+    }
+  } else if (isVisionPro) {
+    deviceInfo.deviceType = 'vision-pro';
+  }
+
+  return deviceInfo;
+}
+
+
 export default function Home() {
+  const router = useRouter();
+  const { t, i18n } = useTranslation();
+  const currLang = i18n.resolvedLanguage;
   const { viewer } = useContext(ViewerContext);
   const { alert } = useContext(AlertContext);
   const { chat: bot } = useContext(ChatContext);
-  const { amicaLife } = useContext(AmicaLifeContext);
+
+
+  const { amicaLife: amicaLife } = useContext(AmicaLifeContext);
 
   const [chatSpeaking, setChatSpeaking] = useState(false);
+
+  /**
+   * SAY A LINE AS HER, not as page text.
+   *
+   * This is the whole reason the clicker moved onto this screen. `/game` answered a tap by calling
+   * setLine() with a string from a local pool — no voice, no expression, and no avatar on the page
+   * to wear one. Here the line goes through the SAME path a chat reply takes:
+   *   textsToScreenplay parses the `[emotion]` tag the bridge injects and produces the talk style;
+   *   ttsJobs carries it to fetchAudio, then speakJobs to viewer.model.speak, which is what moves
+   *   her face and mouth.
+   *
+   * `currentStreamIdx` is passed rather than a fresh number because chat.interrupt() bumps it to
+   * abandon in-flight speech — reusing it means a tap line is dropped by the same interrupt that
+   * drops a chat reply, instead of talking over her.
+   */
+  const speakAsHer = useCallback(async (line: string) => {
+    const text = String(line ?? "").trim();
+    if (!text) return;
+    // Never talk over a chat reply. The tap line is an aside, not a turn.
+    if (chatSpeaking) return;
+    try {
+      const [screenplay] = textsToScreenplay([text]);
+      if (!screenplay) return;
+      /*
+       * SPOKEN DIRECTLY, DELIBERATELY BYPASSING chat.ttsJobs.
+       *
+       * The obvious wiring — enqueue onto ttsJobs — was wrong, and quietly. That queue ends in
+       * processSpeakJobs, which calls bubbleMessage("assistant", …) for every job. bubbleMessage
+       * APPENDS (`currentAssistantMessage += text`) and the result is pushed onto `messageList`,
+       * and `messageList` is spliced into the prompt on the next user turn
+       * (receiveMessageFromUser: [system, ...messageList, user]).
+       *
+       * So routing tap lines through the queue put them in her CONVERSATION MEMORY: a greeting the
+       * player never said anything to earn, glued onto whatever she last replied, sent to the model
+       * as prior context on every subsequent turn. A clicker milestone is not something she said to
+       * you, and it must not become something the model believes she said.
+       *
+       * fetchAudio + model.speak is the same pair processSpeakJobs uses, minus the logging.
+       */
+      const audio = await bot.fetchAudio(screenplay.talk);
+      if (audio) {
+        await bot.viewer?.model?.speak(audio, screenplay);
+      } else {
+        // No TTS configured, or it failed: fetchAudio swallows both and returns null. She still
+        // REACTS — playEmotion is what model.speak would have called — rather than doing nothing.
+        bot.viewer?.model?.playEmotion(screenplay.expression);
+      }
+    } catch (e) {
+      // A tap must never be able to take down the avatar screen. The panel still shows the line.
+      console.error("tap-to-wake could not speak the line", e);
+    }
+  }, [bot, chatSpeaking]);
   const [chatProcessing, setChatProcessing] = useState(false);
   const [chatLog, setChatLog] = useState<Message[]>([]);
   const [assistantMessage, setAssistantMessage] = useState("");
@@ -63,24 +195,168 @@ export default function Home() {
   // otherwise issues from usage of localStorage and window will occur
   const [showContent, setShowContent] = useState(false);
 
-  // The "tap to wake her" clicker now lives on this stage: tapping the character IS the wake action,
-  // the compact HUD reads her state, and the richer stats/quests surface expands as an overlay.
-  const game = useWakeGame();
-  const [gameOpen, setGameOpen] = useState(false);
+  const [showArbiusIntroduction, setShowArbiusIntroduction] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showChatLog, setShowChatLog] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [showChatMode, setShowChatMode] = useState(false);
+  const [showSubconciousText, setShowSubconciousText] = useState(false);
+  const [showMoshi, setShowMoshi] = useState(false);
+  const [showTapToWake, setShowTapToWake] = useState(false);
 
-  // There is no settings pane in the consumer layout, so amica's idle life should always run as if
-  // settings are closed. (Previously driven by the now-removed settings toggle.)
-  useEffect(() => {
-    amicaLife.checkSettingOff(true);
-  }, [amicaLife]);
+  // null indicates havent loaded config yet
+  const [muted, setMuted] = useState<boolean|null>(null);
+  const [webcamEnabled, setWebcamEnabled] = useState(false);
+  const [showLanguageSelector, setShowLanguageSelector] = useState(false);
+
+  const [showStreamWindow, setShowStreamWindow] = useState(false);
+  const videoRef = useRef(null);
+
+  const [isARSupported, setIsARSupported] = useState(false);
+  const [isVRSupported, setIsVRSupported] = useState(false);
+
+  const [isVRHeadset, setIsVRHeadset] = useState(false);
+
 
   useEffect(() => {
-    if (config("bg_color") !== "") {
+    amicaLife.checkSettingOff(!showSettings);
+  }, [showSettings, amicaLife]);
+
+  useEffect(() => {
+    if (muted === null) {
+      setMuted(config('tts_muted') === 'true');
+    }
+
+    setShowArbiusIntroduction(config("show_arbius_introduction") === 'true');
+
+    if (config("bg_color") !== '') {
       document.body.style.backgroundColor = config("bg_color");
     } else {
       document.body.style.backgroundImage = `url(${config("bg_url")})`;
     }
+    // Temp Disable : WebXR
+    // if (window.navigator.xr && window.navigator.xr.isSessionSupported) {
+    //   let deviceInfo = detectVRHeadset();
+    //   setIsVRHeadset(deviceInfo.isVRDevice);
+
+    //   window.navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+    //     console.log('ar supported', supported);
+    //     setIsARSupported(supported);
+    //   });
+    //   window.navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+    //     console.log('vr supported', supported);
+    //     setIsVRSupported(supported);
+    //   });
+    // }
   }, []);
+
+  useEffect(() => {
+    if (viewer && videoRef.current && showStreamWindow) {
+      viewer.startStreaming(videoRef.current);
+    } else {
+      viewer.stopStreaming();
+    }
+  }, [viewer, videoRef, showStreamWindow]);
+
+  function toggleTTSMute() {
+    updateConfig('tts_muted', config('tts_muted') === 'true' ? 'false' : 'true')
+    setMuted(config('tts_muted') === 'true')
+  }
+
+  const toggleState = (
+    setFunc: React.Dispatch<React.SetStateAction<boolean>>, 
+    deps: React.Dispatch<React.SetStateAction<boolean>>[],
+  ) => {
+    setFunc(prev => {
+      if (!prev) {
+        deps.forEach(dep => dep(false));
+      } 
+      return !prev;
+    });
+  };
+  
+  const toggleChatLog = () => {
+    toggleState(setShowChatLog, [setShowSubconciousText, setShowChatMode]);
+  };
+  
+  const toggleShowSubconciousText = () => {
+    if (subconciousLogs.length !== 0) {
+      toggleState(setShowSubconciousText, [setShowChatLog, setShowChatMode]);
+    }
+  };
+  
+  const toggleChatMode = () => {
+    toggleState(setShowChatMode, [setShowChatLog, setShowSubconciousText]);
+  };
+
+  const toggleXR = async (immersiveType: XRSessionMode) => {
+    console.log('Toggle XR', immersiveType);
+
+    if (! window.navigator.xr) {
+      console.error("WebXR not supported");
+      return;
+    }
+    if (! await window.navigator.xr.isSessionSupported(immersiveType)) {
+      console.error("Session not supported");
+      return;
+    }
+
+    if (! viewer.isReady) {
+      console.error("Viewer not ready");
+      return;
+    }
+
+    // TODO should hand tracking be required?
+    let optionalFeatures: string[] = [
+      'hand-tracking',
+      'local-floor',
+    ];
+    if (immersiveType === 'immersive-ar') {
+      optionalFeatures.push('dom-overlay');
+    }
+
+    const sessionInit = {
+      optionalFeatures,
+      domOverlay: { root: document.body },
+    };
+
+    if (viewer.currentSession) {
+      viewer.onSessionEnded();
+
+      try {
+        await viewer.currentSession.end();
+      } catch (err) {
+        // some times session already ended not due to user interaction
+        console.warn(err);
+      }
+
+      // @ts-ignore
+      if (window.navigator.xr.offerSession !== undefined) {
+        // @ts-ignore
+        const session = await navigator.xr?.offerSession(immersiveType, sessionInit);
+        viewer.onSessionStarted(session, immersiveType);
+      }
+      return;
+    }
+
+    // @ts-ignore
+    if (window.navigator.xr.offerSession !== undefined ) {
+      // @ts-ignore
+      const session = await navigator.xr?.offerSession(immersiveType, sessionInit);
+      viewer.onSessionStarted(session, immersiveType);
+      return;
+    }
+
+    try {
+      const session = await window.navigator.xr.requestSession(immersiveType, sessionInit);
+
+      viewer.onSessionStarted(session, immersiveType);
+    } catch (err) {
+      console.error(err);
+    }
+
+  }
+
 
   useEffect(() => {
     bot.initialize(
@@ -98,13 +374,18 @@ export default function Home() {
 
     // TODO remove in future
     // this change was just to make naming cleaner
-    if (config("tts_backend") === "openai") {
+    if (config("tts_backend") === 'openai') {
       updateConfig("tts_backend", "openai_tts");
     }
   }, [bot, viewer]);
 
   useEffect(() => {
-    amicaLife.initialize(viewer, bot, setSubconciousLogs, chatSpeaking);
+    amicaLife.initialize(
+      viewer,
+      bot,
+      setSubconciousLogs,
+      chatSpeaking,
+    );
   }, [amicaLife, bot, viewer]);
 
   useEffect(() => {
@@ -116,150 +397,337 @@ export default function Home() {
   if (!showContent) return <></>;
 
   return (
-    <div className={clsx(m_plus_2.variable, montserrat.variable)}>
-      {/* Consumer top bar: premium wordmark (left) + minimal text nav (right).
-          The wrapper is pointer-events-none so it never steals drags from the 3D stage; only the
-          interactive children re-enable pointer events. */}
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex items-center justify-between px-4 py-3 sm:px-6">
-        <div className="pointer-events-auto select-none font-mono text-[15px] tracking-tight">
-          <span className="text-white/45">$</span>
-          <span className="font-semibold text-[#00ffa3] [text-shadow:0_0_18px_rgba(0,255,163,0.45)]">
-            KAMIKO
-          </span>
-        </div>
+    <div className={clsx(
+      m_plus_2.variable,
+      montserrat.variable,
+    )}>
+      {showStreamWindow && 
 
-        {/* Single-page experience: this button only toggles the on-page stats/quests panel — it
-            never routes to another page. There are no route-changing links anywhere on the stage. */}
-        <nav className="pointer-events-auto flex items-center gap-2.5 font-mono text-[13px] text-white/55 sm:text-sm">
-          <button
-            onClick={() => setGameOpen((o) => !o)}
-            className={clsx(
-              "rounded px-1 py-0.5 tracking-tight transition-colors hover:text-[#00ffa3]",
-              gameOpen && "text-[#00ffa3]",
-            )}
-          >
-            game
-          </button>
-        </nav>
-      </div>
+      <div className="fixed top-1/3 right-4 w-[200px] h-[150px] z-0">
+        <video
+          ref={videoRef} 
+          autoPlay
+          muted
+          playsInline
+          className="w-full h-full object-cover rounded-lg shadow-lg outline outline-2 outline-red-500"
+        />
+      </div> }
 
-      {config("youtube_videoid") !== "" && (
+      { config("youtube_videoid") !== '' && (
         <div className="fixed video-container w-full h-full z-0">
           <iframe
             className="w-full h-full"
             src={`https://www.youtube.com/embed/${config("youtube_videoid")}?&autoplay=1&mute=1&playsinline=1&loop=1&controls=0&disablekb=1&fs=0&playlist=${config("youtube_videoid")}`}
-            frameBorder="0"
-          ></iframe>
+            frameBorder="0"></iframe>
         </div>
       )}
 
-      <Introduction open={config("show_introduction") === "true"} />
+      <Introduction open={config("show_introduction") === 'true'} />
+      <ArbiusIntroduction open={showArbiusIntroduction} close={() => setShowArbiusIntroduction(false)} />
 
       <LoadingProgress />
 
-      {/* The scoped $KAMIKO stylesheet (npcg- tokens) — powers the floating "+1" taps here and the
-          expandable stats/quests overlay below. Scoped by class prefix, so it never leaks. */}
-      <style dangerouslySetInnerHTML={{ __html: NPC_CSS }} />
+      { webcamEnabled && <EmbeddedWebcam setWebcamEnabled={setWebcamEnabled} /> }
+      { showDebug && <DebugPane onClickClose={() => setShowDebug(false) }/> }
+      { config("chatbot_backend") === "moshi" && <Moshi setAssistantText={setAssistantMessage}/>  }
 
-      {/* The live 3D anime character — the hero of the stage. Tapping her IS the wake action: the
-          handler sits on the WRAPPER, so pointerdown bubbles up from the canvas and the VRM's own
-          cursor look-at keeps working (no opaque layer over the canvas). */}
-      <div
-        className="fixed inset-0 z-0"
-        onPointerDown={(e) => game.tap(e.clientX, e.clientY)}
-      >
-        <VrmStoreProvider>
-          <VrmViewer chatMode={false} />
-        </VrmStoreProvider>
-      </div>
-
-      {/* Floating "+1" at the tap coordinates. */}
-      {game.floats.map((f) => (
-        <span
-          key={f.id}
-          className="npcg-float"
-          style={{ left: f.x, top: f.y, color: "#00ffa3" }}
-        >
-          {f.text}
-        </span>
-      ))}
-
-      {/* First-visit coach hint — dismisses on the first tap (the hook clears `coach`). */}
-      {game.coach && (
-        <div className="pointer-events-none fixed inset-x-0 top-[44%] z-30 flex justify-center px-4">
-          <div className="select-none rounded-full border border-[#00ffa3]/30 bg-black/45 px-4 py-1.5 font-mono text-[12px] text-white/80 backdrop-blur-md">
-            <span className="text-[#00ffa3]">tap her</span> to wake her
-          </div>
-        </div>
-      )}
-
-      {/* Premium game HUD — pinned top-right, below the nav; clear of the chat input and disclaimer.
-          Compact and mobile-safe: her reaction line, awakeness bar, taps, streak, and a stats toggle. */}
-      <div className="pointer-events-none fixed right-3 top-14 z-40 w-[13.5rem] sm:top-16">
-        <div className="pointer-events-auto rounded-xl border border-white/10 bg-black/40 p-3 font-mono backdrop-blur-md">
-          <div
-            className={clsx(
-              "mb-2 min-h-[2.4em] text-[11px] leading-snug",
-              game.dim ? "text-white/45" : "text-white/85",
-            )}
-          >
-            {game.line}
-          </div>
-
-          <div className="mb-1 flex items-center justify-between text-[9px] tracking-[0.18em] text-white/40">
-            <span>AWAKENESS</span>
-            <span className="text-[#00ffa3]">{Math.floor(game.awake)}%</span>
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-            <span
-              className="block h-full rounded-full bg-gradient-to-r from-[#8b5cf6] to-[#00ffa3] transition-[width] duration-200"
-              style={{ width: game.awake + "%" }}
-            />
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <div>
-              <div className="text-[9px] tracking-[0.14em] text-white/40">YOUR TAPS</div>
-              <div className="text-[15px] font-bold text-[#00ffa3]">{game.taps.toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-[9px] tracking-[0.14em] text-white/40">STREAK</div>
-              <div className="text-[15px] font-bold text-white/90">
-                {game.streak ? `${game.streak.streak}${game.streak.streak === 1 ? " day" : " days"}` : "—"}
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setGameOpen(true)}
-            className="mt-3 w-full rounded-lg border border-white/10 bg-white/[0.03] py-1.5 text-[11px] font-semibold tracking-tight text-white/75 transition-colors hover:border-[#00ffa3]/40 hover:text-[#00ffa3]"
-          >
-            stats · quests
-          </button>
-        </div>
-      </div>
-
-      {/* The richer surface (leaderboard, quests, buy/chart CTA, share, wallet, streak-saver),
-          expandable on the SAME page in the unified npcg- language. */}
-      {gameOpen && <WakeGamePanel game={game} onClose={() => setGameOpen(false)} />}
-
+      <VrmStoreProvider>
+        <VrmViewer chatMode={showChatMode}/>
+        {showSettings && (
+          <Settings
+            onClickClose={() => setShowSettings(false)}
+          />
+        )}
+      </VrmStoreProvider>
+      
       <MessageInputContainer isChatProcessing={chatProcessing} />
 
-      {/* Her voice on stage: assistant / user speech text. */}
-      {shownMessage === "assistant" && <AssistantText message={assistantMessage} />}
-      {shownMessage === "user" && <UserText message={userMessage} />}
+      {/* main menu */}
+      <div className="absolute z-10 m-2">
+        <div className="grid grid-flow-col gap-[8px] place-content-end mt-2 bg-slate-800/40 rounded-md backdrop-blur-md shadow-sm">
+          <div className='flex flex-col justify-center items-center p-1 space-y-3'>
+            <MenuButton
+              large={isVRHeadset}
+              icon={WrenchScrewdriverIcon}
+              onClick={() => setShowSettings(true)}
+              label="show settings"
+            />
+
+            {showChatLog ? (
+              <MenuButton
+                large={isVRHeadset}
+                icon={ChatBubbleLeftIcon}
+                onClick={toggleChatLog}
+                label="hide chat log"
+              />
+            ) : (
+              <MenuButton
+                large={isVRHeadset}
+                icon={ChatBubbleLeftRightIcon}
+                onClick={toggleChatLog}
+                label="show chat log"
+              />
+            )}
+
+            { muted ? (
+              <MenuButton
+                large={isVRHeadset}
+                icon={SpeakerXMarkIcon}
+                onClick={toggleTTSMute}
+                label="unmute"
+              />
+            ) : (
+              <MenuButton
+                large={isVRHeadset}
+                icon={SpeakerWaveIcon}
+                onClick={toggleTTSMute}
+                label="mute"
+              />
+            )}
+
+            { webcamEnabled ? (
+              <MenuButton
+                large={isVRHeadset}
+                icon={VideoCameraIcon}
+                onClick={() => setWebcamEnabled(false)}
+                label="disable webcam"
+              />
+            ) : (
+              <MenuButton
+                large={isVRHeadset}
+                icon={VideoCameraSlashIcon}
+                onClick={() => setWebcamEnabled(true)}
+                label="enable webcam"
+              />
+            )}
+
+            <MenuButton
+              large={isVRHeadset}
+              icon={ShareIcon}
+              href="/share"
+              target={isTauri() ? '' : '_blank'}
+              label="share"
+            />
+            <MenuButton
+              large={isVRHeadset}
+              icon={CloudArrowDownIcon}
+              href="/import"
+              label="import"
+            />
+
+            {/*
+              THE $NPC FUNNEL, REACHABLE FROM THE FRONT DOOR.
+              `/` is the URL a visitor actually lands on, and until these three existed the clicker
+              (retention), the holder dashboard (tips and perks — the revenue surface) and the trust
+              page were direct-link-only orphans: /game and /holder linked back here, nothing linked
+              forward. The trust page was the one that cost us — somebody who lands on `/` and wants
+              to check the mint before buying had no path to the page that answers that.
+
+              `router.push` rather than MenuButton's `href`, which is `window.open(href, target)`:
+              window.open takes a raw URL and does NOT apply next.config.js's `basePath`, so on a
+              BASE_PATH deployment every one of these would open a 404. The router applies it.
+            */}
+            {/*
+              IT OPENS HERE NOW, instead of `router.push("/game")`.
+              The game is called "tap to wake her" and /game renders no avatar and speaks with a
+              local string pool, so the button built to drive retention navigated away from the one
+              thing this product is. The panel mounts over the stage and her line is spoken by the
+              real pipeline; /game stays exactly where it was for the full dashboard — leaderboard,
+              quests, the CTA, the wallet handshake — which does not belong on top of the stage.
+            */}
+            <MenuButton
+              large={isVRHeadset}
+              icon={CursorArrowRaysIcon}
+              onClick={() => setShowTapToWake((v) => !v)}
+              label="tap to wake her"
+            />
+            <MenuButton
+              large={isVRHeadset}
+              icon={CurrencyDollarIcon}
+              onClick={() => router.push("/holder")}
+              label="holder dashboard"
+            />
+            <MenuButton
+              large={isVRHeadset}
+              icon={ShieldCheckIcon}
+              onClick={() => router.push("/trust")}
+              label="trust / verify the mint"
+            />
+
+            { showSubconciousText ? (
+              <MenuButton
+                large={isVRHeadset}
+                icon={IconBrain}
+                onClick={toggleShowSubconciousText}
+                label="hide subconscious"
+              />
+            ) : (
+              <MenuButton
+                large={isVRHeadset}
+                icon={IconBrain}
+                onClick={toggleShowSubconciousText}
+                label="show subconscious"
+              />
+            )}
+
+            {/* Temp Disable : WebXR */}
+            {/*<MenuButton
+              large={isVRHeadset}
+              icon={CubeTransparentIcon}
+              disabled={!isARSupported}
+              onClick={() => toggleXR('immersive-ar')}
+              label="Augmented Reality"
+            />
+
+            <MenuButton
+              large={isVRHeadset}
+              icon={CubeIcon}
+              disabled={!isVRSupported}
+              onClick={() => toggleXR('immersive-vr')}
+              label="Virtual Reality"
+            />*/}
+
+            <MenuButton
+              large={isVRHeadset}
+              icon={CodeBracketSquareIcon}
+              onClick={() => setShowDebug(true)}
+              label="debug"
+            />
+
+            {/* Temp Disable : WebXR */}
+            {/* { showChatMode ? (
+              <MenuButton
+                large={isVRHeadset}
+                icon={Squares2X2Icon}
+                disabled={viewer.currentSession !== null}
+                onClick={toggleChatMode}
+                label="hide chat mode"
+              />
+            ) : (
+              <MenuButton
+                large={isVRHeadset}
+                icon={SquaresPlusIcon}
+                disabled={viewer.currentSession !== null}
+                onClick={toggleChatMode}
+                label="show chat mode"
+              />
+            )} */}
+
+            <div className="flex flex-row items-center space-x-2">
+                <VerticalSwitchBox
+                  value={showChatMode}
+                  label={""}
+                  onChange={toggleChatMode}
+                />
+            </div>
+
+            <div className="flex flex-row items-center space-x-2">
+              { showStreamWindow ? (
+                <SignalIcon
+                  className="h-7 w-7 text-white opacity-100 hover:opacity-50 active:opacity-100 hover:cursor-pointer"
+                  aria-hidden="true"
+                  onClick={() => setShowStreamWindow(false)}
+                />
+              ) : (
+                <SignalIcon
+                  className="h-7 w-7 text-white opacity-50 hover:opacity-100 active:opacity-100 hover:cursor-pointer"
+                  aria-hidden="true"
+                  onClick={() => setShowStreamWindow(true)}
+                />
+              )}
+            </div>
+            
+          </div>
+        </div>    
+      </div>
+
+      {showChatLog && <ChatLog messages={chatLog} />}
+
+      {/*
+        The clicker, over the stage rather than instead of it. It is deliberately mounted here —
+        after VrmViewer and outside the settings tree — so opening it never unmounts the VRM: the
+        model reload costs seconds and would make the panel feel like a page navigation, which is
+        the thing it exists to stop being.
+      */}
+      {showTapToWake && (
+        <TapToWake
+          speak={speakAsHer}
+          onTap={() => {
+            /*
+             * TAPPING IS A REAL WAKE SIGNAL, not a meter.
+             *
+             * Her wakefulness is owned by chat.lastAwake and by amicaLife (enabled by default),
+             * which puts her to `Sleep` on idle and pauses itself. Nothing outside amicaLife called
+             * wakeFromSleep(), so before this the player could tap the bar to 100% while she stayed
+             * asleep in the system that decides whether she idles, animates and speaks on her own —
+             * and the panel painted `happy` over a sleeping face. "Tap to wake her" was a caption.
+             */
+            try { bot.updateAwake(); } catch { /* chat is not initialized yet */ }
+          }}
+          setMood={(mood) => {
+            try {
+              // WHILE SHE IS SPEAKING, THE CHAT OWNS HER FACE. processSpeakJobs sets the expression
+              // from the screenplay for the sentence she is delivering; overwriting it mid-word
+              // because the meter crossed a band is the panel talking over her.
+              if (chatSpeaking) return;
+              /*
+               * THE PANEL CAN WAKE HER. IT MAY NOT PUT HER TO SLEEP.
+               *
+               * A 'Sleep' mood only means the CLICKER's meter is low, which is a fact about the
+               * game and not about her. Writing it was the mirror of the bug where closing the
+               * panel woke her: open the clicker while she is awake and mid-conversation, the meter
+               * starts at zero, and the first mood effect painted her asleep. Whether she is asleep
+               * is amicaLife's call, made from the idle timer, and the emoji on the panel is where
+               * the meter gets to have its say.
+               */
+              if (mood === 'Sleep') return;
+              // wakeFromSleep() FIRST, and it matters: it ends amicaLife's sleep state AND writes
+              // the neutral reset itself, so doing it after playEmotion would immediately overwrite
+              // the mood we just set.
+              {
+                // THE CANONICAL SEQUENCE, copied from amicaLife.checkSettingOff — the repo's own
+                // answer to "the user came back". wakeFromSleep() alone is not waking her:
+                // handleSleepEvent PAUSED the loop on the way in (amicaLife.pause()), and clearing
+                // isSleep without resume() leaves her neither asleep nor running.
+                amicaLife.wakeFromSleep();
+                bot.updateAwake();
+                amicaLife.resume();
+              }
+              // playEmotion drives the FACE and the body's idle mood together (model.ts), no audio.
+              bot.viewer?.model?.playEmotion(mood);
+            } catch { /* the model or amicaLife is not up yet; a tap must not throw on the stage */ }
+          }}
+          openLink={(url) => {
+            // The panel never navigates this tab — the whole point of moving the dashboard onto
+            // the stage is that you do not leave her to use it. A buy/chart link is the one thing
+            // that genuinely belongs somewhere else, so it opens in a new tab, with noopener so
+            // the destination cannot reach back into this window.
+            try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* popup blocked */ }
+          }}
+          onClose={() => setShowTapToWake(false)}
+        />
+      )}
+
+      {/* Normal chat text */}
+      {!showSubconciousText && ! showChatLog && ! showChatMode && (
+        <>
+          { shownMessage === 'assistant' && (
+            <AssistantText message={assistantMessage} />
+          )}
+          { shownMessage === 'user' && (
+            <UserText message={userMessage} />
+          )}
+        </>
+      )}
 
       {/* Thought text */}
-      {thoughtMessage !== "" && <ThoughtText message={thoughtMessage} />}
+      {thoughtMessage !== "" && <ThoughtText message={thoughtMessage}/>}
 
-      {/* Slim, honest footer flush to the very bottom edge. It is a thin full-width line with a
-          subtle backdrop and sits BELOW the raised chat input (see messageInput.tsx bottom-7), so it
-          never overlaps the input or any control. pointer-events-none keeps it click-through. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50">
-        <p className="w-full bg-black/45 py-1 text-center text-[10px] leading-tight text-white/50 backdrop-blur-sm">
-          Not financial advice. $KAMIKO isn&apos;t live yet — no official contract exists.
-        </p>
-      </div>
+      {/* Chat mode text */}
+      {showChatMode && <ChatModeText messages={chatLog}/>}
+
+      {/* Subconcious stored prompt text */}
+      {showSubconciousText && <SubconciousText messages={subconciousLogs}/>}
 
       <AddToHomescreen />
 
