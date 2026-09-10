@@ -785,7 +785,30 @@ export class Chat {
       console.debug("vision_backend", visionBackend);
 
       let res = "";
-      if (visionBackend === "vision_llamacpp") {
+      if (visionBackend === "vision_bridge") {
+        // The secure default: POST the frame to the $KAMIKO bridge, which runs Anthropic vision with
+        // its OWN key (server-side) and returns a description. No LLM key is ever shipped to the
+        // browser, and it works on the free Groq chat tier (Groq's gpt-oss can't see).
+        const url = config("vision_bridge_url");
+        if (!url) {
+          console.warn("vision_bridge_url not configured");
+          return;
+        }
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            image: `data:image/jpeg;base64,${imageData}`,
+            prompt: config("vision_system_prompt"),
+          }),
+        });
+        if (!resp.ok) {
+          console.warn("vision_bridge failed", resp.status);
+          return;
+        }
+        const data = (await resp.json()) as { description?: string };
+        res = typeof data?.description === "string" ? data.description : "";
+      } else if (visionBackend === "vision_llamacpp") {
         const messages: Message[] = [
           { role: "system", content: config("vision_system_prompt") },
           ...this.messageList!,

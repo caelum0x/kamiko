@@ -76,7 +76,12 @@ export const defaults = {
   // 'false' keeps the proven amica path. Reuses amica's sentence-split + [emotion] parsing.
   tts_streaming: process.env.NEXT_PUBLIC_TTS_STREAMING ?? 'false',
   stt_backend: process.env.NEXT_PUBLIC_STT_BACKEND ?? 'whisper_browser',
-  vision_backend: process.env.NEXT_PUBLIC_VISION_BACKEND ?? 'vision_openai',
+  // Default to the secure bridge vision path (server-side Anthropic key). vision_bridge_url is the
+  // bridge's /v1/vision, derived from the same NPC_API origin the chat uses.
+  vision_backend: process.env.NEXT_PUBLIC_VISION_BACKEND ?? 'vision_bridge',
+  vision_bridge_url:
+    process.env.NEXT_PUBLIC_VISION_BRIDGE_URL ??
+    (process.env.NEXT_PUBLIC_NPC_API ? process.env.NEXT_PUBLIC_NPC_API.replace(/\/+$/, '') + '/v1/vision' : ''),
   vision_system_prompt: process.env.NEXT_PUBLIC_VISION_SYSTEM_PROMPT ?? `Look at the image as you would if you are a human, be concise, witty and charming.`,
   vision_openai_apikey: process.env.NEXT_PUBLIC_VISION_OPENAI_APIKEY ?? 'default',
   vision_openai_url: process.env.NEXT_PUBLIC_VISION_OPENAI_URL ?? 'https://api-01.heyamica.com',
