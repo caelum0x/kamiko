@@ -18,6 +18,7 @@ import { EmoteController } from "@/features/emoteController/emoteController";
  * the model cannot be fitted, and never throws inside the render loop.
  */
 import { StatisticalIdleAnimation } from "@/features/proceduralAnimation/statisticalIdle";
+import { applyKamikoLook } from "@/features/vrmViewer/kamikoLook";
 import { Screenplay } from "@/features/chat/messages";
 import { downscaleModelTextures, logTextureInfo } from '@/utils/textureDownscaler';
 import { OptimizedGLTFLoader } from '@/utils/gltfOptimizer';
@@ -204,6 +205,13 @@ export class Model {
               }
             }
           });
+
+          // Kamiko's signature: the awake neon-green glowing eye (BRAND heterochromia). Cosmetic and
+          // defensive — never throws, no-ops if the model has no iris material. Runs after the traverse
+          // above so material types are settled.
+          if (config("kamiko_heterochromia") !== "false") {
+            applyKamikoLook(vrm);
+          }
 
           // this.setTransparency(0.5);
 

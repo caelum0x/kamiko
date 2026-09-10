@@ -22,9 +22,16 @@ export const defaults = {
   show_add_to_homescreen: process.env.NEXT_PUBLIC_SHOW_ADD_TO_HOMESCREEN ?? 'true',
   bg_color: process.env.NEXT_PUBLIC_BG_COLOR ?? '',
   bg_url: process.env.NEXT_PUBLIC_BG_URL ?? '/bg/bg-room2.jpg',
-  vrm_url: process.env.NEXT_PUBLIC_VRM_HASH ?? '/vrm/AvatarSample_B.vrm',
+  // Kamiko's canonical model path. `public/vrm/npc.vrm` is the character's model (a placeholder VRoid
+  // sample today; drop the authored Kamiko VRM in at this path and it goes live with no config change).
+  // Env override fixed: this read NEXT_PUBLIC_VRM_HASH, so the intended NEXT_PUBLIC_VRM_URL never applied.
+  vrm_url: process.env.NEXT_PUBLIC_VRM_URL ?? '/vrm/npc.vrm',
   vrm_hash: '',
   vrm_save_type: 'web',
+  // Kamiko's signature: the awake neon-green glowing eye (BRAND.md heterochromia). Applied at runtime
+  // to whatever VRM is loaded (features/vrmViewer/kamikoLook.ts) so even the placeholder reads as her.
+  // 'false' disables it. A true one-asleep/one-glowing split needs the authored model.
+  kamiko_heterochromia: process.env.NEXT_PUBLIC_KAMIKO_HETEROCHROMIA ?? 'true',
   youtube_videoid: '',
   animation_url: process.env.NEXT_PUBLIC_ANIMATION_URL ?? '/animations/idle_loop.vrma',
   animation_procedural: process.env.NEXT_PUBLIC_ANIMATION_PROCEDURAL ?? 'false',

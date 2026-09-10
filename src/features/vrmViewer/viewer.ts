@@ -238,7 +238,7 @@ export class Viewer {
     renderer.shadowMap.enabled = false;
 
     renderer.setSize(width, height);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.xr.enabled = true;
     // TODO should this be enabled for only the quest3?
     renderer.xr.setFramebufferScaleFactor(2.0); // reduce pixelation with minimal performance hit on quest 3
@@ -943,7 +943,7 @@ export class Viewer {
     const parentElement = this.renderer.domElement.parentElement;
     if (!parentElement) return;
 
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(
       parentElement.clientWidth,
       parentElement.clientHeight,
@@ -960,7 +960,7 @@ export class Viewer {
     const parentElement = this.renderer.domElement.parentElement;
     if (!parentElement) return;
 
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
     let width = parentElement.clientWidth;
     let height = parentElement.clientHeight;
