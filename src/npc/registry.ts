@@ -10,8 +10,9 @@
  *     (the page says "unrecognised answer"), never to a half-filled card.
  *   - A MALFORMED ROW IS DROPPED AND COUNTED, never patched up. `dropped` is surfaced so an
  *     operator can see the registry and the front end disagree about a schema.
- *   - BADGES FAIL CLOSED. `pledgeVerified` must be `=== true`; a grade we do not recognise tones
- *     grey; a mint with no on-chain proof is labelled a creator claim, exactly as the registry
+ *   - BADGES FAIL CLOSED. The ownership flag (`pledgeVerified`, the persisted key kept for data
+ *     compat) must be `=== true` before a row reads "ownership verified"; a grade we do not recognise
+ *     tones grey; a mint with no on-chain proof is labelled a creator claim, exactly as the registry
  *     itself labels it (`mintSource: 'unverified-legacy'`).
  *   - IDS THAT BECOME URLS ARE SHAPE-CHECKED HERE. A ticker is interpolated into
  *     `${REGISTRY}/agents/<ticker>` and a listing id into `/listings/<id>/artifact`; the shapes

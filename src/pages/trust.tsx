@@ -24,6 +24,17 @@ const num = (n: unknown, d = 2): string | null => (typeof n === 'number' && isFi
 const pct = (n: unknown): string => (typeof n === 'number' && isFinite(n) ? num(n, 2) + '%' : 'UNKNOWN');
 const BAND: Record<string, string> = { A: '#00ffa3', B: '#00ffa3', C: '#ffb020', D: '#ffb020', F: '#ff2e63' };
 
+/**
+ * Signal rows that NARRATE THE DEVELOPER's own holdings are never shown to a holder. We have no
+ * obligation to disclose developer holdings, and a "dev bag" row — even rendered as UNKNOWN — tells a
+ * holder nothing verifiable and only invites speculation about developer buys/sells. The on-chain
+ * SAFETY checks (mint & freeze authority, LP custody, holder concentration, third-party scanners, the
+ * signed ownership claim) are untouched and still shown; only the developer-holdings narration is
+ * suppressed. `creator_balance` is the scorer's developer-holdings signal (see
+ * packages/onchain/trustscore.ts).
+ */
+const HIDDEN_SIGNAL_IDS = new Set<string>(['creator_balance']);
+
 type Outcome = { ok: true; report: any } | { ok: false; reason: string };
 function classifyTrust(status: number, body: any): Outcome {
   if (!body || typeof body !== 'object' || body.schema !== TRUST_SCHEMA) {
@@ -108,6 +119,9 @@ export default function TrustPage() {
     unknown: ['UNVERIFIED', 'at least one check could not be completed — not an all-clear'],
   };
   const conf = typeof s?.confidence === 'number' && isFinite(s.confidence) ? Math.max(0, Math.min(1, s.confidence)) : 0;
+  // Drop developer-holdings narration before it ever reaches a holder (see HIDDEN_SIGNAL_IDS). The
+  // score itself is left exactly as the verifier computed it — only the row is hidden.
+  const shownSignals: any[] = Array.isArray(s?.signals) ? s.signals.filter((x: any) => !HIDDEN_SIGNAL_IDS.has(x?.id)) : [];
 
   return (
     <div className="npct-root">
@@ -156,10 +170,10 @@ export default function TrustPage() {
                 </>
               )}
             </div>
-            {Array.isArray(report?.signals || s?.signals) && (s?.signals?.length ? (
+            {shownSignals.length ? (
               <div className="npct-card">
-                <h3>Signals ({s.signals.length})</h3>
-                {s.signals.map((x: any, i: number) => (
+                <h3>Signals ({shownSignals.length})</h3>
+                {shownSignals.map((x: any, i: number) => (
                   <div key={i} className="npct-sig">
                     <div className="npct-sig-top"><span>{x.label || x.id}</span><span className={'npct-chip ' + (['pass', 'warn', 'fail'].includes(x.status) ? x.status : 'unknown')}>{(['pass', 'warn', 'fail'].includes(x.status) ? x.status : 'unknown').toUpperCase()}</span></div>
                     <div className="npct-dim">{x.detail}</div>
@@ -167,7 +181,7 @@ export default function TrustPage() {
                   </div>
                 ))}
               </div>
-            ) : null)}
+            ) : null}
             {report?.holders && (
               <div className="npct-card">
                 <h3>Top holders {report.holders.complete ? '(full sweep)' : '(partial — lower bounds)'}</h3>

@@ -3,7 +3,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from "react";
 import { useRouter } from "next/router";
@@ -15,9 +14,6 @@ import {
   ChatBubbleLeftIcon,
   ChatBubbleLeftRightIcon,
   CloudArrowDownIcon,
-  CodeBracketSquareIcon,
-  CubeIcon,
-  CubeTransparentIcon,
   LanguageIcon,
   ShareIcon,
   SpeakerWaveIcon,
@@ -27,17 +23,15 @@ import {
   VideoCameraIcon,
   VideoCameraSlashIcon,
   WrenchScrewdriverIcon,
-  SignalIcon,
   AcademicCapIcon,
   CursorArrowRaysIcon,
   CurrencyDollarIcon,
   ShieldCheckIcon,
+  UserGroupIcon,
 } from "@heroicons/react/24/outline";
-import { IconBrain } from '@tabler/icons-react';
 
 import { MenuButton } from "@/components/menuButton";
 import { AssistantText } from "@/components/assistantText";
-import { SubconciousText } from "@/components/subconciousText";
 import { AddToHomescreen } from "@/components/addToHomescreen";
 import { Alert } from "@/components/alert";
 import { UserText } from "@/components/userText";
@@ -47,7 +41,6 @@ import { MessageInputContainer } from "@/components/messageInputContainer";
 import { Introduction } from "@/components/introduction";
 import { ArbiusIntroduction } from "@/components/arbiusIntroduction";
 import { LoadingProgress } from "@/components/loadingProgress";
-import { DebugPane } from "@/components/debugPane";
 import { Settings } from "@/components/settings";
 import { EmbeddedWebcam } from "@/components/embeddedWebcam";
 import { Moshi } from "@/features/moshi/components/Moshi";
@@ -198,9 +191,7 @@ export default function Home() {
   const [showArbiusIntroduction, setShowArbiusIntroduction] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showChatLog, setShowChatLog] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
   const [showChatMode, setShowChatMode] = useState(false);
-  const [showSubconciousText, setShowSubconciousText] = useState(false);
   const [showMoshi, setShowMoshi] = useState(false);
   const [showTapToWake, setShowTapToWake] = useState(false);
 
@@ -208,12 +199,6 @@ export default function Home() {
   const [muted, setMuted] = useState<boolean|null>(null);
   const [webcamEnabled, setWebcamEnabled] = useState(false);
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
-
-  const [showStreamWindow, setShowStreamWindow] = useState(false);
-  const videoRef = useRef(null);
-
-  const [isARSupported, setIsARSupported] = useState(false);
-  const [isVRSupported, setIsVRSupported] = useState(false);
 
   const [isVRHeadset, setIsVRHeadset] = useState(false);
 
@@ -250,14 +235,6 @@ export default function Home() {
     // }
   }, []);
 
-  useEffect(() => {
-    if (viewer && videoRef.current && showStreamWindow) {
-      viewer.startStreaming(videoRef.current);
-    } else {
-      viewer.stopStreaming();
-    }
-  }, [viewer, videoRef, showStreamWindow]);
-
   function toggleTTSMute() {
     updateConfig('tts_muted', config('tts_muted') === 'true' ? 'false' : 'true')
     setMuted(config('tts_muted') === 'true')
@@ -276,87 +253,12 @@ export default function Home() {
   };
   
   const toggleChatLog = () => {
-    toggleState(setShowChatLog, [setShowSubconciousText, setShowChatMode]);
+    toggleState(setShowChatLog, [setShowChatMode]);
   };
-  
-  const toggleShowSubconciousText = () => {
-    if (subconciousLogs.length !== 0) {
-      toggleState(setShowSubconciousText, [setShowChatLog, setShowChatMode]);
-    }
-  };
-  
+
   const toggleChatMode = () => {
-    toggleState(setShowChatMode, [setShowChatLog, setShowSubconciousText]);
+    toggleState(setShowChatMode, [setShowChatLog]);
   };
-
-  const toggleXR = async (immersiveType: XRSessionMode) => {
-    console.log('Toggle XR', immersiveType);
-
-    if (! window.navigator.xr) {
-      console.error("WebXR not supported");
-      return;
-    }
-    if (! await window.navigator.xr.isSessionSupported(immersiveType)) {
-      console.error("Session not supported");
-      return;
-    }
-
-    if (! viewer.isReady) {
-      console.error("Viewer not ready");
-      return;
-    }
-
-    // TODO should hand tracking be required?
-    let optionalFeatures: string[] = [
-      'hand-tracking',
-      'local-floor',
-    ];
-    if (immersiveType === 'immersive-ar') {
-      optionalFeatures.push('dom-overlay');
-    }
-
-    const sessionInit = {
-      optionalFeatures,
-      domOverlay: { root: document.body },
-    };
-
-    if (viewer.currentSession) {
-      viewer.onSessionEnded();
-
-      try {
-        await viewer.currentSession.end();
-      } catch (err) {
-        // some times session already ended not due to user interaction
-        console.warn(err);
-      }
-
-      // @ts-ignore
-      if (window.navigator.xr.offerSession !== undefined) {
-        // @ts-ignore
-        const session = await navigator.xr?.offerSession(immersiveType, sessionInit);
-        viewer.onSessionStarted(session, immersiveType);
-      }
-      return;
-    }
-
-    // @ts-ignore
-    if (window.navigator.xr.offerSession !== undefined ) {
-      // @ts-ignore
-      const session = await navigator.xr?.offerSession(immersiveType, sessionInit);
-      viewer.onSessionStarted(session, immersiveType);
-      return;
-    }
-
-    try {
-      const session = await window.navigator.xr.requestSession(immersiveType, sessionInit);
-
-      viewer.onSessionStarted(session, immersiveType);
-    } catch (err) {
-      console.error(err);
-    }
-
-  }
-
 
   useEffect(() => {
     bot.initialize(
@@ -401,18 +303,6 @@ export default function Home() {
       m_plus_2.variable,
       montserrat.variable,
     )}>
-      {showStreamWindow && 
-
-      <div className="fixed top-1/3 right-4 w-[200px] h-[150px] z-0">
-        <video
-          ref={videoRef} 
-          autoPlay
-          muted
-          playsInline
-          className="w-full h-full object-cover rounded-lg shadow-lg outline outline-2 outline-red-500"
-        />
-      </div> }
-
       { config("youtube_videoid") !== '' && (
         <div className="fixed video-container w-full h-full z-0">
           <iframe
@@ -428,7 +318,6 @@ export default function Home() {
       <LoadingProgress />
 
       { webcamEnabled && <EmbeddedWebcam setWebcamEnabled={setWebcamEnabled} /> }
-      { showDebug && <DebugPane onClickClose={() => setShowDebug(false) }/> }
       { config("chatbot_backend") === "moshi" && <Moshi setAssistantText={setAssistantMessage}/>  }
 
       <VrmStoreProvider>
@@ -565,65 +454,12 @@ export default function Home() {
               onClick={() => router.push("/trust")}
               label="trust / verify the mint"
             />
-
-            { showSubconciousText ? (
-              <MenuButton
-                large={isVRHeadset}
-                icon={IconBrain}
-                onClick={toggleShowSubconciousText}
-                label="hide subconscious"
-              />
-            ) : (
-              <MenuButton
-                large={isVRHeadset}
-                icon={IconBrain}
-                onClick={toggleShowSubconciousText}
-                label="show subconscious"
-              />
-            )}
-
-            {/* Temp Disable : WebXR */}
-            {/*<MenuButton
-              large={isVRHeadset}
-              icon={CubeTransparentIcon}
-              disabled={!isARSupported}
-              onClick={() => toggleXR('immersive-ar')}
-              label="Augmented Reality"
-            />
-
             <MenuButton
               large={isVRHeadset}
-              icon={CubeIcon}
-              disabled={!isVRSupported}
-              onClick={() => toggleXR('immersive-vr')}
-              label="Virtual Reality"
-            />*/}
-
-            <MenuButton
-              large={isVRHeadset}
-              icon={CodeBracketSquareIcon}
-              onClick={() => setShowDebug(true)}
-              label="debug"
+              icon={UserGroupIcon}
+              onClick={() => router.push("/agents")}
+              label="agents"
             />
-
-            {/* Temp Disable : WebXR */}
-            {/* { showChatMode ? (
-              <MenuButton
-                large={isVRHeadset}
-                icon={Squares2X2Icon}
-                disabled={viewer.currentSession !== null}
-                onClick={toggleChatMode}
-                label="hide chat mode"
-              />
-            ) : (
-              <MenuButton
-                large={isVRHeadset}
-                icon={SquaresPlusIcon}
-                disabled={viewer.currentSession !== null}
-                onClick={toggleChatMode}
-                label="show chat mode"
-              />
-            )} */}
 
             <div className="flex flex-row items-center space-x-2">
                 <VerticalSwitchBox
@@ -633,22 +469,6 @@ export default function Home() {
                 />
             </div>
 
-            <div className="flex flex-row items-center space-x-2">
-              { showStreamWindow ? (
-                <SignalIcon
-                  className="h-7 w-7 text-white opacity-100 hover:opacity-50 active:opacity-100 hover:cursor-pointer"
-                  aria-hidden="true"
-                  onClick={() => setShowStreamWindow(false)}
-                />
-              ) : (
-                <SignalIcon
-                  className="h-7 w-7 text-white opacity-50 hover:opacity-100 active:opacity-100 hover:cursor-pointer"
-                  aria-hidden="true"
-                  onClick={() => setShowStreamWindow(true)}
-                />
-              )}
-            </div>
-            
           </div>
         </div>    
       </div>
@@ -721,7 +541,7 @@ export default function Home() {
       )}
 
       {/* Normal chat text */}
-      {!showSubconciousText && ! showChatLog && ! showChatMode && (
+      {! showChatLog && ! showChatMode && (
         <>
           { shownMessage === 'assistant' && (
             <AssistantText message={assistantMessage} />
@@ -737,9 +557,6 @@ export default function Home() {
 
       {/* Chat mode text */}
       {showChatMode && <ChatModeText messages={chatLog}/>}
-
-      {/* Subconcious stored prompt text */}
-      {showSubconciousText && <SubconciousText messages={subconciousLogs}/>}
 
       <AddToHomescreen />
 

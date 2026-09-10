@@ -65,7 +65,7 @@ describe('parseAgentsDirectory', () => {
       agents: [{ ...AGENT_ROW, pledgeVerified: 1, mintVerified: 'yes', trustGradeSource: 'on-chain-totally' }],
     });
     const a = out!.agents[0];
-    expect(a.pledgeVerified).toBe(false); // 1 is not a verified pledge
+    expect(a.pledgeVerified).toBe(false); // 1 is not a verified ownership signature
     expect(a.mintVerified).toBe(false); // 'yes' is not on-chain proof
     expect(a.trustGradeSource).toBe('unknown'); // an unrecognised source is never promoted
   });

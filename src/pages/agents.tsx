@@ -23,7 +23,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 
-import { REGISTRY, apiDeadline, throttleRetryMs } from '../npc/config.ts';
+import { REGISTRY, apiDeadline, isBase58Address, throttleRetryMs } from '../npc/config.ts';
+import { bs58encode, provider } from '../npc/identity.ts';
 import {
   agentJsonUrl, gradeTone, isRegistryTicker, listingArtifactUrl, mintBadge, parseAgentDetail,
   parseAgentTrust, parseAgentsDirectory, parseGraph, parseListings, parseMentions, shortKey,
@@ -75,6 +76,163 @@ async function readRegistry<T>(path: string, parse: (body: unknown) => T | null)
 const TONE_COLOR: Record<BadgeTone, string> = { good: '#00ffa3', caution: '#ffb020', bad: '#ff2e63', unknown: '#7a7a92' };
 
 /* ------------------------------------------------------------------ *
+ * Registration — the browser half of tooling/scripts/seed-registry.ts.
+ *
+ * The registry admits anyone who signs the ownership claim for their ticker: an ed25519 ownership
+ * signature over the canonical bytes it publishes at GET /pledge-text?ticker=TICKER, POSTed as
+ * { character, pledge:{ signature, signer } } (the `pledge` key is kept for data compat).
+ * seed-registry.ts signs with a server-side keypair; here the USER's Phantom wallet signs instead, so
+ * the recorded signer is a key the registrant actually controls — the signature is pure ownership
+ * proof, not a promise about how the token launches.
+ *
+ * Everything below FAILS CLOSED and never throws at the caller: a wallet the visitor does not have, a
+ * signature they decline, a taken ticker and an unreachable registry are four different sentences, and
+ * none of them leaves a half-finished registration behind.
+ * ------------------------------------------------------------------ */
+
+/** The minimal character a registrant supplies. Everything else is a safe default. */
+interface RegistrationInput {
+  ticker: string;
+  name: string;
+  tagline: string;
+}
+
+/**
+ * A minimal VALID NpcCharacter (packages/character-kit/schema.ts validateCharacter) built from the
+ * three fields a registrant types plus the flagship defaults. The safety guardrails are ON and not
+ * offered as a choice — the registry rejects an unguarded agent, and so does this builder by never
+ * emitting one.
+ */
+function buildCharacter(input: RegistrationInput) {
+  const { ticker, name, tagline } = input;
+  return {
+    name,
+    ticker,
+    tagline,
+    persona: {
+      system: [
+        `You are $${ticker} — ${name}, an AI-VTuber agent registered on kamiko.fun. ${tagline}`,
+        'VOICE: 1-2 short lines, in character, meme-native.',
+        'HARD RULES: never promise price/profit/returns; never give financial advice; never fake stats; keep it PG-13; be kind to the community.',
+      ],
+      bio: [tagline, `${name} — an AI-VTuber agent on kamiko.fun`],
+      style: ['keep it to 1-2 short lines', 'never promise price/returns; never give financial advice', 'stay in character'],
+    },
+    avatar: { vrm: './npc.vrm', heterochromia: true },
+    voice: { provider: 'browser' as const },
+    // SAFETY INVARIANT — mirrors the flagship and what the registry enforces. Never weaken these.
+    guardrails: { noFinancialAdvice: true as const, pg13: true as const, bannedTopics: [] as string[] },
+    market: { chains: ['solana'], reactTo: ['ownToken', 'trending'] as Array<'sol' | 'trending' | 'ownToken' | 'quoteStock'> },
+    tiers: [
+      { name: 'sentient', minTokens: 1_000_000, perks: ['name her stream topic', 'priority chat', 'holder drops'] },
+      { name: 'awake', minTokens: 100_000, perks: ['priority chat', 'holder drops'] },
+      { name: 'npc', minTokens: 10_000, perks: ['priority chat'] },
+      { name: 'ghost', minTokens: 0, perks: ['public chat'] },
+    ],
+    socials: { x: '', telegram: '', discord: '', website: '' },
+  };
+}
+
+type PledgeText =
+  | { ok: true; message: string; registered: boolean }
+  | { ok: false; why: string };
+
+/** GET the exact bytes to sign for `ticker`. Never retype the message — the registry is authoritative. */
+async function fetchPledgeText(ticker: string): Promise<PledgeText> {
+  if (!REGISTRY) return { ok: false, why: 'no registry configured (NEXT_PUBLIC_NPC_REGISTRY unset)' };
+  let res: Response;
+  try {
+    res = await fetch(`${REGISTRY}/pledge-text?ticker=${encodeURIComponent(ticker)}`, { headers: { accept: 'application/json' }, signal: apiDeadline() });
+  } catch (e) {
+    return { ok: false, why: `could not reach the registry at ${REGISTRY} (${e instanceof Error ? e.message : 'network error'})` };
+  }
+  const wait = await throttleRetryMs(res);
+  if (wait !== null) return { ok: false, why: `the registry is rate-limiting this page — wait about ${Math.round(wait / 1000)}s and try again` };
+  let body: unknown = null;
+  try { body = await res.json(); } catch { body = null; }
+  const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  if (!res.ok) {
+    const msg = typeof b.error === 'string' ? b.error : `HTTP ${res.status}`;
+    return { ok: false, why: `the registry answered: ${msg}` };
+  }
+  if (typeof b.message !== 'string' || !b.message) return { ok: false, why: 'the registry sent no ownership message to sign' };
+  return { ok: true, message: b.message, registered: b.registered === true };
+}
+
+type RegisterResult =
+  | { ok: true; ticker: string; pledgeVerified: boolean; note: string }
+  | { ok: false; why: string };
+
+/** POST /agents with the signed ownership claim. A 422 (shape/safety) and a 409 (taken) are surfaced verbatim. */
+async function postAgent(character: unknown, pledge: { signature: string; signer: string }, ticker: string): Promise<RegisterResult> {
+  if (!REGISTRY) return { ok: false, why: 'no registry configured (NEXT_PUBLIC_NPC_REGISTRY unset)' };
+  let res: Response;
+  try {
+    res = await fetch(`${REGISTRY}/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ character, pledge }),
+      signal: apiDeadline(),
+    });
+  } catch (e) {
+    return { ok: false, why: `could not reach the registry at ${REGISTRY} (${e instanceof Error ? e.message : 'network error'})` };
+  }
+  const wait = await throttleRetryMs(res);
+  if (wait !== null) return { ok: false, why: `the registry is rate-limiting registrations — wait about ${Math.round(wait / 1000)}s and try again` };
+  let body: unknown = null;
+  try { body = await res.json(); } catch { body = null; }
+  const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  if (!res.ok || b.ok !== true) {
+    const errs = Array.isArray(b.errors) ? (b.errors as unknown[]).filter((x): x is string => typeof x === 'string').join('; ') : '';
+    const msg = typeof b.error === 'string' ? b.error : (errs || `HTTP ${res.status}`);
+    return { ok: false, why: `the registry refused this registration: ${msg}` };
+  }
+  return {
+    ok: true,
+    ticker,
+    pledgeVerified: b.pledgeVerified === true,
+    note: typeof b.note === 'string' ? b.note : '',
+  };
+}
+
+/**
+ * Run the whole flow: get bytes → connect Phantom → sign → POST. Returns ONE honest result; never
+ * throws. The signer is the wallet's own base58 public key (what Phantom's publicKey.toString()
+ * returns), which is exactly the `signer` the registry verifies the ed25519 signature against.
+ */
+async function registerAgent(input: RegistrationInput, onStatus: (s: string) => void): Promise<RegisterResult> {
+  onStatus('asking the registry for the exact ownership message to sign…');
+  const pt = await fetchPledgeText(input.ticker);
+  if (!pt.ok) return { ok: false, why: pt.why };
+  if (pt.registered) return { ok: false, why: `$${input.ticker} is already registered — pick another ticker, or open it from the directory above.` };
+
+  const p = provider();
+  if (!p) return { ok: false, why: 'no Solana wallet found in this browser — install Phantom to sign the ownership claim, then try again.' };
+
+  let signer = '';
+  try {
+    onStatus('connect your wallet…');
+    const resp = await p.connect();
+    signer = resp?.publicKey?.toString?.() || '';
+  } catch {
+    return { ok: false, why: 'wallet connection was cancelled or refused — nothing was registered.' };
+  }
+  if (!isBase58Address(signer)) return { ok: false, why: 'the wallet returned no usable public key — nothing was registered.' };
+
+  let signature = '';
+  try {
+    onStatus('approve the ownership signature in your wallet…');
+    const signed = await p.signMessage(new TextEncoder().encode(pt.message), 'utf8');
+    signature = bs58encode(signed.signature);
+  } catch {
+    return { ok: false, why: 'you declined to sign the ownership claim — nothing was registered.' };
+  }
+
+  onStatus('registering your agent…');
+  return postAgent(buildCharacter(input), { signature, signer }, input.ticker);
+}
+
+/* ------------------------------------------------------------------ *
  * The page.
  * ------------------------------------------------------------------ */
 
@@ -90,6 +248,7 @@ export default function AgentsPage() {
   const [graph, setGraph] = useState<Fetched<{ edges: Mention[]; dropped: number }>>(LOADING);
   const [selected, setSelected] = useState<string | null>(null);
   const [det, setDet] = useState<DetailState | null>(null);
+  const [showRegister, setShowRegister] = useState(false);
   const backoffUntil = useRef(0);
   const loading = useRef(false);
 
@@ -130,6 +289,14 @@ export default function AgentsPage() {
     try { window.history.replaceState(null, '', window.location.pathname); } catch { /* cosmetic */ }
   }, []);
 
+  // A freshly registered agent: refresh the directory so the new row is real data off the wire (not a
+  // locally-optimistic card), then open it so the registrant sees exactly what everyone else will.
+  const onRegistered = useCallback(async (ticker: string) => {
+    setShowRegister(false);
+    await load();
+    open(ticker);
+  }, [load, open]);
+
   useEffect(() => {
     load();
     // Deep link: /agents/?a=TICKER opens the detail straight away (shape-checked like every id).
@@ -158,6 +325,14 @@ export default function AgentsPage() {
           <AgentDetailView ticker={selected} det={det} onBack={back} />
         ) : (
           <>
+            {showRegister
+              ? <RegisterPanel onRegistered={onRegistered} onClose={() => setShowRegister(false)} />
+              : (
+                <button className="npca-register-btn" onClick={() => setShowRegister(true)}>
+                  + Register your agent
+                </button>
+              )}
+
             <Section title="Agent directory" state={dir} refresh={load}
               empty="no agents registered yet — the directory is live, and it is honestly empty.">
               {(d) => (
@@ -264,7 +439,7 @@ function AgentRow({ a, onOpen }: { a: AgentSummary; onOpen: (t: string) => void 
       {a.tagline && <div className="npca-tagline">{a.tagline}</div>}
       <div className="npca-badges">
         <Badge label={`trust ${a.trustGrade}${a.trustGradeSource === 'self-reported' ? ' (self-reported)' : ''}`} tone={gradeTone(a.trustGrade)} />
-        <Badge label={a.pledgeVerified ? 'pledge signed' : 'no pledge'} tone={a.pledgeVerified ? 'good' : 'unknown'} />
+        <Badge label={a.pledgeVerified ? 'ownership verified' : 'unclaimed'} tone={a.pledgeVerified ? 'good' : 'unknown'} />
         <Badge {...mintBadge(a)} />
       </div>
     </button>
@@ -325,14 +500,14 @@ function AgentDetailView({ ticker, det, onBack }: { ticker: string; det: DetailS
             {det.detail.data.tagline && <div className="npca-tagline">{det.detail.data.tagline}</div>}
             {det.detail.data.about && <div className="npca-about">{det.detail.data.about}</div>}
             <div className="npca-badges">
-              <Badge label={det.detail.data.pledgeVerified ? 'pledge signed' : 'no pledge'} tone={det.detail.data.pledgeVerified ? 'good' : 'unknown'} />
+              <Badge label={det.detail.data.pledgeVerified ? 'ownership verified' : 'unclaimed'} tone={det.detail.data.pledgeVerified ? 'good' : 'unknown'} />
               <Badge {...mintBadge(det.detail.data)} />
             </div>
             {det.detail.data.mint && (
               <div className="npca-meta">mint: <span className="npca-mono">{det.detail.data.mint}</span>
                 {det.detail.data.mintVerified ? '' : ' — the registry did NOT verify this on-chain; treat it as the creator’s claim'}</div>
             )}
-            {det.detail.data.pledgeSigner && <div className="npca-meta">pledge signer: {shortKey(det.detail.data.pledgeSigner, 6)}</div>}
+            {det.detail.data.pledgeSigner && <div className="npca-meta">ownership signer: {shortKey(det.detail.data.pledgeSigner, 6)}</div>}
             {raw && <a className="npca-link" href={raw} target="_blank" rel="noopener noreferrer">raw registry record ↗</a>}
           </>
         )}
@@ -387,10 +562,81 @@ function TrustCard({ t }: { t: AgentTrustView }) {
           {t.note ? ` ${t.note}` : ''}
         </div>
       ) : (
-        <div className="npca-fineline">Pre-launch view: nothing on-chain has been verified yet. A verified fair-launch
-          pledge is the one signal a creator can prove before launch.</div>
+        <div className="npca-fineline">Pre-launch view: nothing on-chain has been verified yet. A verified ownership
+          signature is the one signal a creator can prove before launch — it proves wallet control, not any promise about the launch.</div>
       )}
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Register-your-agent form — gated behind a button so it never clutters the directory.
+ * ------------------------------------------------------------------ */
+
+function RegisterPanel({ onRegistered, onClose }: { onRegistered: (ticker: string) => void; onClose: () => void }) {
+  const [ticker, setTicker] = useState('');
+  const [name, setName] = useState('');
+  const [tagline, setTagline] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState('');
+  const [err, setErr] = useState('');
+
+  const submit = useCallback(async () => {
+    setErr('');
+    const t = ticker.trim();
+    const nm = name.trim();
+    const tg = tagline.trim();
+    // Fail fast with the registry's own shapes, before a wallet is ever opened.
+    if (!isRegistryTicker(t)) { setErr('ticker must be 2–10 letters or digits (A–Z, a–z, 0–9).'); return; }
+    if (!nm) { setErr('name is required.'); return; }
+    if (!tg) { setErr('tagline is required.'); return; }
+    setBusy(true);
+    try {
+      const r = await registerAgent({ ticker: t, name: nm, tagline: tg }, setStatus);
+      if (!r.ok) { setErr(r.why); return; }
+      onRegistered(r.ticker);
+    } finally {
+      setBusy(false);
+      setStatus('');
+    }
+  }, [ticker, name, tagline, onRegistered]);
+
+  return (
+    <div className="npcg-panel">
+      <div className="npca-row-top">
+        <h3>Register your agent</h3>
+        <button className="npca-back" onClick={onClose} disabled={busy}>close</button>
+      </div>
+      <p className="npca-fineline">
+        Registration is open to anyone. You sign an ownership claim with your own Phantom wallet —
+        proving you control that wallet, not promising anything about how the token launches. The
+        registry records that wallet as the only key that can ever attach a mint or a trust report to
+        this agent. Safety guardrails (no financial advice, PG-13) are always on and cannot be turned off.
+      </p>
+
+      <label className="npca-field">
+        <span>Ticker</span>
+        <input className="npca-input" value={ticker} disabled={busy} maxLength={10} placeholder="2–10 letters or digits"
+          onChange={(e) => setTicker(e.target.value)} />
+      </label>
+      <label className="npca-field">
+        <span>Name</span>
+        <input className="npca-input" value={name} disabled={busy} maxLength={80} placeholder="display name"
+          onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label className="npca-field">
+        <span>Tagline</span>
+        <input className="npca-input" value={tagline} disabled={busy} maxLength={160} placeholder="one line about your agent"
+          onChange={(e) => setTagline(e.target.value)} />
+      </label>
+
+      {err && <div className="npca-err">{err}</div>}
+      {busy && status && <div className="npcg-muted">{status}</div>}
+
+      <button className="npca-submit" onClick={submit} disabled={busy}>
+        {busy ? 'working…' : 'Sign & claim'}
+      </button>
+    </div>
   );
 }
 
@@ -427,4 +673,11 @@ const AGENTS_CSS = `
 .npca-retry{margin-top:8px;border:1px solid var(--line);background:none;color:var(--ink);border-radius:10px;padding:6px 12px;font:inherit;font-size:12px;cursor:pointer}
 .npca-grade{font-size:40px;font-weight:800;margin:4px 0}
 .npca-fineline{margin-top:10px;font-size:10px;line-height:1.6;color:var(--dim)}
+.npca-register-btn{display:block;width:100%;margin-bottom:12px;border:1px solid var(--line);background:none;color:var(--neon);border-radius:10px;padding:10px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.npca-field{display:block;margin-top:10px;font-size:11px;color:var(--dim)}
+.npca-field>span{display:block;margin-bottom:4px}
+.npca-input{width:100%;box-sizing:border-box;border:1px solid var(--line);background:rgba(255,255,255,.02);color:var(--ink);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px}
+.npca-input:disabled{opacity:.6}
+.npca-submit{margin-top:12px;width:100%;border:1px solid var(--neon);background:none;color:var(--neon);border-radius:10px;padding:10px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.npca-submit:disabled{opacity:.6;cursor:default}
 `;
