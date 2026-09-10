@@ -5,10 +5,18 @@ import { GoogleAnalytics } from '@next/third-parties/google';
 import Script from 'next/script'
 
 export default function Document() {
-  const title = "$KAMIKO — the anime VTuber who woke up inside a Solana memecoin";
-  const description = "Kamiko is a live 3D anime-girl AI VTuber reacting to the Solana market in real time — emotion, motion, voice, and vision rendered right in your browser. Tap to wake her. Not launched yet — no official contract exists.";
+  const title = "$KAMIKO — the AI girl who woke up inside NVIDIA. paired with NVDAx.";
+  const description = "Kamiko is a live 3D anime-girl AI VTuber reacting to NVIDIA (NVDAx) + her token in real time — emotion, motion, voice, and vision rendered right in your browser. Tap to wake her. Not launched yet — no official contract exists.";
   const imageUrl = "/ogp.png";
   const appName = "$KAMIKO";
+  const siteUrl = "https://kamiko.fun";
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: appName,
+    url: siteUrl,
+    description: title,
+  };
 
   return (
     <Html lang="en">
@@ -21,6 +29,11 @@ export default function Document() {
         <meta name="twitter:title" content={title} />
         <meta name="twitter:description" content={description} />
         <meta name="twitter:image" content={imageUrl} />
+
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
 
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />

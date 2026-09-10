@@ -185,7 +185,10 @@ export default function TrustPage() {
         )}
 
         <div className="npct-fine"><b style={{ color: '#e8e8f2' }}>NOT FINANCIAL ADVICE.</b> This is a verification report, not an
-          audit and not a safety rating. A clean report does not stop $KAMIKO going to zero — most memecoins do. Only risk what you can lose.</div>
+          audit and not a safety rating. A clean report does not stop $KAMIKO going to zero — most memecoins do; $KAMIKO is an
+          experimental memecoin with no intrinsic value. Only risk what you can lose. NVDAX is a tokenized tracker, NOT NVIDIA
+          stock — holders own no NVIDIA shares. Not affiliated with NVIDIA, Backed, Raydium or StonkFun beyond being launched on
+          StonkFun. There is no official $KAMIKO contract until the mint is live and pinned.</div>
       </div>
     </div>
   );

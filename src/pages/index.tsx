@@ -56,7 +56,7 @@ import { ViewerContext } from "@/features/vrmViewer/viewerContext";
 import { Message, Role } from "@/features/chat/messages";
 import { ChatContext } from "@/features/chat/chatContext";
 import { textsToScreenplay } from "@/features/chat/messages";
-import { TapToWake } from "@/components/tapToWake";
+import { TapToWake, MarketHud } from "@/components/tapToWake";
 import { AlertContext } from "@/features/alert/alertContext";
 
 import { config, updateConfig } from '@/utils/config';
@@ -441,6 +441,18 @@ export default function Home() {
       </VrmStoreProvider>
       
       <MessageInputContainer isChatProcessing={chatProcessing} />
+
+      {/*
+        THE TWO-TICKER HUD, ON THE STAGE. She woke up inside NVIDIA and lives on NVDAX; this shows
+        the tape she reacts to — the NVDAX quote she is paired against and her own $KAMIKO token.
+        Pinned top-right so it clears the top-left menu and the bottom chat input at 390px, and it
+        fails silently: a slow poll of the bridge's /market, last-good left standing on any failure.
+      */}
+      <MarketHud
+        openLink={(url) => {
+          try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* popup blocked */ }
+        }}
+      />
 
       {/* main menu */}
       <div className="absolute z-10 m-2">

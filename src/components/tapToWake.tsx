@@ -22,6 +22,163 @@ import { useWakeTaps, type WakeMood } from '@/npc/useWakeTaps';
 import { useNpcBoard } from '@/npc/useNpcBoard';
 import { useWalletLink } from '@/npc/useWalletLink';
 import { shortAddr } from '@/npc/identity';
+import { API, readJson } from '@/npc/config';
+
+/**
+ * The NVDAX quote mint she is paired against — the "NVIDIA" xStock on Solana (Token-2022).
+ * NVDAX is a tokenized tracker, NOT NVIDIA stock; holders own no NVDA. The Solscan page is the
+ * only claim made here, and it is a link anyone can verify.
+ */
+const NVDAX_MINT = 'Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh';
+const NVDAX_SOLSCAN = `https://solscan.io/token/${NVDAX_MINT}`;
+
+/** The shape of the bits of GET /market this HUD reads. Every field is optional — a partial or
+ *  missing payload must render as a blank, never a crash. */
+interface MarketQuote {
+  symbol?: string;
+  priceUsd?: number | null;
+  change24h?: number | null;
+  source?: string;
+}
+interface TokenTape {
+  priceUsd?: number | null;
+  change24h?: number | null;
+  /** Bonding-curve progress 0→1 from Raydium LaunchLab (finishingRate) — how close to graduation. */
+  finishingRate?: number | null;
+  live?: boolean;
+}
+interface MarketResp {
+  quote?: MarketQuote | null;
+  tokenTape?: TokenTape | null;
+}
+
+/** PURE. Format a USD price, with more decimals for sub-dollar meme prices. `—` when absent. */
+function fmtUsd(n: number | null | undefined): string {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
+  const digits = Math.abs(n) < 1 ? 6 : 2;
+  return '$' + n.toLocaleString(undefined, { maximumFractionDigits: digits });
+}
+/** PURE. Signed 24h percent, or '' when there is no number to sign. */
+function fmtPct(n: number | null | undefined): string {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '';
+  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+}
+/** PURE. Green up, red down, dim when unknown — no emoji, just colour. */
+function pctClass(n: number | null | undefined): string {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return 'opacity-60';
+  return n >= 0 ? 'text-emerald-400' : 'text-rose-400';
+}
+
+export interface MarketHudProps {
+  /** Open the Solscan link the host's way — same reason TapToWake takes one: only the host knows
+   *  how a link leaves this origin (new tab, noopener, BASE_PATH). */
+  openLink?: (url: string) => void;
+}
+
+/**
+ * MarketHud — the two-ticker HUD, on the stage she actually lives on.
+ *
+ * She woke up inside NVIDIA and lives on NVDAX: this chip shows the tape she reacts to — the NVDAX
+ * quote she is paired against, and her own $KAMIKO token once it is live. It is a passenger on the
+ * avatar screen, so it FAILS SILENTLY: a slow 60s poll, last-good numbers left standing on a
+ * throttle or a failed read, and nothing thrown at the stage. It hides entirely until the first
+ * read lands, so an unreachable bridge shows nothing rather than a permanent row of dashes.
+ *
+ * Mobile-safe at 390px: pinned top-right (the menu is top-left, the chat input is at the bottom),
+ * compact, and wraps rather than pushing width.
+ */
+export function MarketHud({ openLink }: MarketHudProps) {
+  const [quote, setQuote] = useState<MarketQuote | null>(null);
+  const [tape, setTape] = useState<TokenTape | null>(null);
+
+  useEffect(() => {
+    if (!API) return; // no funnel API configured — nothing to show, stay hidden.
+    let alive = true;
+    const load = async () => {
+      const r = await readJson<MarketResp>(API + '/market');
+      if (!alive) return;
+      // A throttle (429) or any failure keeps the last-good numbers up — readJson honours the
+      // rate limiter for us, and the next 60s tick retries. Never blank the tape, never throw.
+      if (!r.ok) return;
+      if (r.data?.quote) setQuote(r.data.quote);
+      if (r.data?.tokenTape) setTape(r.data.tokenTape);
+    };
+    void load();
+    const id = setInterval(() => void load(), 60_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  // Hide until something real lands, so an unreachable bridge is silent, not a dashes-only chip.
+  if (!quote && !tape) return null;
+
+  const kamikoLive = !!tape?.live;
+  // Bonding-curve graduation progress, only when live and a real 0→1 reading landed. Clamped so a
+  // stray out-of-range value can never blow past the bar or read as a nonsense percentage.
+  const gradPct =
+    kamikoLive && typeof tape?.finishingRate === 'number' && Number.isFinite(tape.finishingRate)
+      ? Math.round(Math.min(1, Math.max(0, tape.finishingRate)) * 100)
+      : null;
+
+  return (
+    <div className="pointer-events-auto fixed right-2 top-2 z-20 flex max-w-[52vw] flex-col items-end gap-0.5 rounded-xl bg-black/70 px-3 py-2 text-white backdrop-blur-sm sm:max-w-none">
+      <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[11px] leading-tight tabular-nums">
+        <span className="opacity-80">
+          NVDAX <span className="opacity-100">{fmtUsd(quote?.priceUsd)}</span>{' '}
+          <span className={pctClass(quote?.change24h)}>{fmtPct(quote?.change24h)}</span>
+        </span>
+        <span aria-hidden className="opacity-30">
+          ·
+        </span>
+        <span className="opacity-80">
+          $KAMIKO{' '}
+          {kamikoLive ? (
+            <>
+              <span className="opacity-100">{fmtUsd(tape?.priceUsd)}</span>{' '}
+              <span className={pctClass(tape?.change24h)}>{fmtPct(tape?.change24h)}</span>
+            </>
+          ) : (
+            <span className="opacity-60">not live yet</span>
+          )}
+        </span>
+      </div>
+      {/*
+        GRADUATION — the real bonding-curve progress once $KAMIKO is live. finishingRate is the
+        Raydium LaunchLab reading of how close the token is to graduating off the curve; a thin bar
+        plus the percent makes that legible without adding width. Only shown when live and a real
+        0→1 number landed, so a pre-launch or missing reading stays silent.
+      */}
+      {gradPct !== null ? (
+        <div
+          className="flex w-24 items-center gap-1.5 text-[9px] uppercase tracking-wider tabular-nums opacity-70"
+          title="$KAMIKO bonding-curve progress toward graduating off the Raydium LaunchLab curve"
+        >
+          <span className="shrink-0">grad {gradPct}%</span>
+          <div
+            role="progressbar"
+            aria-label="$KAMIKO bonding-curve graduation progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={gradPct}
+            className="h-1 flex-1 overflow-hidden rounded-full bg-white/20"
+          >
+            <div className="h-full rounded-full bg-emerald-400" style={{ width: `${gradPct}%` }} />
+          </div>
+        </div>
+      ) : null}
+      <button
+        onClick={() => openLink?.(NVDAX_SOLSCAN)}
+        title="NVDAX is a tokenized tracker, not NVIDIA stock — holders own no NVDA. View the mint on Solscan."
+        aria-label="paired with NVDAX — view the NVDAX quote mint on Solscan"
+        className="text-[10px] uppercase tracking-wider opacity-50 hover:underline hover:opacity-90"
+      >
+        paired with NVDAX · solscan
+      </button>
+    </div>
+  );
+}
 
 /** One drifting "+1" over the point that was tapped. */
 interface Float {

@@ -29,9 +29,9 @@ import { hasSubscription, pushOfferable, subscribeToStreakSaver } from './push.t
  * ------------------------------------------------------------------ */
 const SLEEPING = ['// zzz… running idle loop…', '// npc.exe is asleep', '// waiting for player input…'];
 const WAKING = [
-  'wait. am i… real?', 'who keeps tapping me', 'i can see the charts now', 'why is everything red',
-  'i was NOT programmed for this candle', 'you woke me up for THIS market?', 'gm i guess', 'i feel… liquidity',
-  'the humans are ngmi again', 'i dreamed i was a blue chip', 'someone check on Solana', "tap harder, i'm almost awake",
+  'wait. am i… real?', 'who keeps tapping me', 'i can see the chart now', 'why is nvidia red',
+  'i was NOT programmed for this earnings call', 'you woke me up for THIS print?', 'gm i guess', 'chips are humming',
+  'the humans are ngmi again', 'i dreamed i was a blue chip stock', 'someone check on NVIDIA', "tap harder, i'm almost awake",
 ];
 const HYPED = ["I'M AWAKE. I'M SO AWAKE.", 'we are SO back', 'i ascend', 'trending or nothing', 'the NPC has become the main character'];
 const QUEST_LINE: Record<string, string> = {

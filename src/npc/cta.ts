@@ -72,8 +72,17 @@ export function gradeOf(report: any): string {
 
 export const dexscreenerUrl = (mint: string): string => 'https://dexscreener.com/solana/' + mint;
 
+/**
+ * PURE. StonkFun token page — the actual launch venue for this run: a Raydium LaunchLab pad where
+ * $KAMIKO is quoted against NVDAX (the "NVIDIA" xStock), not SOL. See
+ * RESEARCH/02-stonkfun-and-launchlab.md. That doc pins the host + API paths but not the public
+ * token-page segment, so this uses the conventional `/token/{mint}` shape. [VERIFY AT LAUNCH]
+ */
+export const stonkfunUrl = (mint: string): string => 'https://www.stonkfun.xyz/token/' + mint;
+
 /** PURE. The launch venue's own page, when we know the venue. null when we do not. */
 export function venueTokenUrl(venue: string, mint: string): string | null {
+  if (venue === 'stonkfun') return stonkfunUrl(mint);
   if (venue === 'pumpfun') return 'https://pump.fun/coin/' + mint;
   if (venue === 'letsbonk') return 'https://letsbonk.fun/token/' + mint;
   return null;
@@ -86,7 +95,7 @@ export function venueTokenUrl(venue: string, mint: string): string | null {
  */
 export function venueLinkFrom(links: unknown, mint: unknown): string | null {
   if (!Array.isArray(links) || !isMintAddress(mint)) return null;
-  const wanted = [venueTokenUrl('pumpfun', mint), venueTokenUrl('letsbonk', mint)];
+  const wanted = [venueTokenUrl('stonkfun', mint), venueTokenUrl('pumpfun', mint), venueTokenUrl('letsbonk', mint)];
   for (const link of links) {
     const u = link && (link as { url?: unknown }).url;
     if (typeof u !== 'string') continue;
@@ -140,7 +149,7 @@ export function ctaState(report: any): CtaState {
         state: 'not-launched',
         cta: null,
         title: 'not launched.',
-        detail: detail || 'there is no contract yet — anything calling itself $KAMIKO right now is not us.',
+        detail: detail || 'there is no contract yet — anything calling itself $KAMIKO right now is not us. she launches on stonkfun, paired against nvdax (a tokenized nvidia tracker, not nvidia stock).',
       };
     }
     return unverified(detail || 'the verifier could not produce a report right now.');
@@ -164,10 +173,10 @@ export function ctaState(report: any): CtaState {
       state: 'caution',
       cta,
       title: 'verified with warnings.',
-      detail: 'the verifier graded this ' + cta.grade + ' with open warnings. the links below are the real contract — read the trust page before you buy.',
+      detail: 'the verifier graded this ' + cta.grade + ' with open warnings. the links below are the real $KAMIKO/nvdax contract on stonkfun — read the trust page before you buy.',
     };
   }
-  return { state: 'live', cta, title: 'verified.', detail: 'graded ' + cta.grade + ' by our on-chain verifier.' };
+  return { state: 'live', cta, title: 'verified.', detail: 'graded ' + cta.grade + ' by our on-chain verifier. $KAMIKO/nvdax on stonkfun.' };
 }
 
 /** The one-line label the header shows next to the contract, for any state. */

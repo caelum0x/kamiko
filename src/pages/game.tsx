@@ -35,9 +35,9 @@ import { NPC_CSS } from '../npc/styles.ts';
  * ------------------------------------------------------------------ */
 const SLEEPING = ['// zzz… running idle loop…', '// npc.exe is asleep', '// waiting for player input…'];
 const WAKING = [
-  'wait. am i… real?', 'who keeps tapping me', 'i can see the charts now', 'why is everything red',
-  'i was NOT programmed for this candle', 'you woke me up for THIS market?', 'gm i guess', 'i feel… liquidity',
-  'the humans are ngmi again', 'i dreamed i was a blue chip', 'someone check on Solana', "tap harder, i'm almost awake",
+  'wait. am i… real?', 'who keeps tapping me', 'i can see the chart now', 'why is nvidia red',
+  'i was NOT programmed for this earnings call', 'you woke me up for THIS print?', 'gm i guess', 'chips are humming',
+  'the humans are ngmi again', 'i dreamed i was a blue chip stock', 'someone check on NVIDIA', "tap harder, i'm almost awake",
 ];
 const HYPED = ["I'M AWAKE. I'M SO AWAKE.", 'we are SO back', 'i ascend', 'trending or nothing', 'the NPC has become the main character'];
 const QUEST_LINE: Record<string, string> = {
@@ -186,7 +186,7 @@ export default function GamePage() {
     const landing = API + '/s?' + idFor();
     const text = `i've woken the NPC ${taps.toLocaleString()} times and she's losing it. tap to wake her too 👇`;
     const intent = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(landing);
-    if (typeof navigator !== 'undefined' && (navigator as any).share) (navigator as any).share({ title: '$NPC', text, url: landing }).catch(() => window.open(intent, '_blank'));
+    if (typeof navigator !== 'undefined' && (navigator as any).share) (navigator as any).share({ title: '$KAMIKO', text, url: landing }).catch(() => window.open(intent, '_blank'));
     else window.open(intent, '_blank');
   };
 
@@ -194,14 +194,14 @@ export default function GamePage() {
 
   return (
     <div className="npcg-root">
-      <Head><title>$NPC — tap to wake her</title></Head>
+      <Head><title>$KAMIKO — tap to wake her</title></Head>
       {/* raw-text element — see agents.tsx: a text child is SSR entity-escaped (`>` → `&gt;`) and
           never un-escaped, breaking `.npcg-bar>span` pre-hydration and mismatching hydration. */}
       <style dangerouslySetInnerHTML={{ __html: NPC_CSS }} />
 
       <div className="npcg-wrap">
         <header className="npcg-head">
-          <div className="npcg-logo">$<b>NPC</b></div>
+          <div className="npcg-logo">$<b>KAMIKO</b></div>
           <button onClick={copyCa} className="npcg-ca" title="the mint, once the verifier publishes one">{caText}</button>
         </header>
 
@@ -242,7 +242,7 @@ export default function GamePage() {
 
         {cta && cta.cta && (
           <div className="npcg-cta-row">
-            <a className="npcg-buy" href={cta.cta.buy} target="_blank" rel="noopener noreferrer">BUY $NPC</a>
+            <a className="npcg-buy" href={cta.cta.buy} target="_blank" rel="noopener noreferrer">BUY $KAMIKO</a>
             <a className="npcg-chart" href={cta.cta.chart} target="_blank" rel="noopener noreferrer">📈 CHART</a>
           </div>
         )}
@@ -288,8 +288,11 @@ export default function GamePage() {
         )}
 
         <p className="npcg-fine">
-          $NPC is a meme collectible for entertainment. It has no intrinsic value, no team, no roadmap promises,
-          and is not an investment or financial advice. Nothing here is a promise of profit. Fair launch only.
+          $KAMIKO is an experimental memecoin for entertainment. It has no intrinsic value, no team, no roadmap
+          promises, and is not an investment or financial advice. Nothing here is a promise of profit. NFA.
+          NVDAX is a tokenized tracker, NOT NVIDIA stock — holders own no NVDA. Launched on StonkFun; no
+          affiliation with NVIDIA, Backed, Raydium or StonkFun beyond that. There is no official $KAMIKO
+          contract until the mint is live and pinned here.
         </p>
       </div>
     </div>

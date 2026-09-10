@@ -559,8 +559,11 @@ export default function HolderPage() {
 
         <p className="npcg-fine">
           Tips are voluntary and non-refundable. They buy no share, no claim and no promise — they are
-          a tip to a character on a stream. $KAMIKO is a meme collectible for entertainment, not an
-          investment, and nothing here is financial advice.
+          a tip to a character on a stream. $KAMIKO is an experimental memecoin for entertainment, with
+          no intrinsic value, not an investment, and nothing here is financial advice. NVDAX is a
+          tokenized tracker, NOT NVIDIA stock — holders own no NVIDIA shares. Not affiliated with
+          NVIDIA, Backed, Raydium or StonkFun beyond being launched on StonkFun. There is no official
+          $KAMIKO contract until the mint is live and pinned here.
         </p>
       </div>
     </div>
