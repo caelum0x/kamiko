@@ -23,31 +23,37 @@ export function EmbeddedWebcam({
     setWebcamEnabled(false);
   });
 
-  const processImageFromCanvas = async (data: string) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = imgRef.current!.width;
-    canvas.height = imgRef.current!.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return "";
+  // Longest-side cap for a vision frame. Vision models bill ~ by resolution, so downscaling the
+  // webcam frame before upload makes each /v1/vision call cheaper + faster with no quality loss that
+  // matters for "describe what you see". 768px is plenty for a scene description.
+  const VISION_MAX_DIM = 768;
 
+  const processImageFromCanvas = async (data: string) => {
     const img = new Image();
     await new Promise<void>((resolve, reject) => {
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, imgRef.current!.width, imgRef.current!.height);
-        resolve();
-      };
+      img.onload = () => resolve();
       img.onerror = reject;
       img.src = data;
     });
-    return canvas.toDataURL('image/jpeg').replace('data:image/jpeg;base64,', '');
+    const srcW = img.width || imgRef.current?.width || VISION_MAX_DIM;
+    const srcH = img.height || imgRef.current?.height || VISION_MAX_DIM;
+    const scale = Math.min(1, VISION_MAX_DIM / Math.max(srcW, srcH));
+    const w = Math.max(1, Math.round(srcW * scale));
+    const h = Math.max(1, Math.round(srcH * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return "";
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL('image/jpeg', 0.8).replace('data:image/jpeg;base64,', '');
   };
 
   useEffect(() => {
     const handleImageDataChange = async () => {
       if (imageData) {
-        const fixedImageData = imageMode === "webcam"
-          ? imageData.replace('data:image/jpeg;base64,', '')
-          : await processImageFromCanvas(imageData);
+        // Both modes go through the downscale now, so a webcam frame is capped + compressed too.
+        const fixedImageData = await processImageFromCanvas(imageData);
         await bot.getVisionResponse(fixedImageData);
         setCameraDisabled(false);
         setImageData("");
