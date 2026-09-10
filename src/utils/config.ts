@@ -92,6 +92,25 @@ export const defaults = {
    * NEXT_PUBLIC_TTS_STREAMING=false is the way back to the serial queue if a deployment needs it.
    */
   tts_streaming: process.env.NEXT_PUBLIC_TTS_STREAMING ?? 'true',
+
+
+  /*
+   * OPERATOR PUPPETEERING (src/features/faceTracking). OFF, and it stays off unless a human turns
+   * it on for a show.
+   *
+   * She is an AI VTuber with her own brain; this is the switch that lets a person take her face —
+   * head, eyes, brows, jaw — while the AI keeps her voice. Default 'false' for three reasons, in
+   * order of how much they matter: it opens the CAMERA, it downloads several megabytes of WASM and
+   * a face model, and most of the time the character is supposed to be driving herself.
+   */
+  face_tracking: process.env.NEXT_PUBLIC_FACE_TRACKING ?? 'false',
+  /*
+   * Where the ~3.7 MB face model comes from. Empty ⇒ Google's CDN, which is fine for an operator
+   * trying it out and is a third party in the path of a live show. Point it at a self-hosted copy
+   * for anything that matters.
+   */
+  face_model_url: process.env.NEXT_PUBLIC_FACE_MODEL_URL ?? '',
+
   stt_backend: process.env.NEXT_PUBLIC_STT_BACKEND ?? 'whisper_browser',
   // Default to the secure bridge vision path (server-side Anthropic key). vision_bridge_url is the
   // bridge's /v1/vision, derived from the same NPC_API origin the chat uses.

@@ -58,3 +58,9 @@ working/*
 # wrangler build/deploy temp
 .wrangler/
 out/
+
+# Verbatim copy of @mediapipe/tasks-vision's runtime, made by scripts/copy_mediapipe.js on every
+# build. It cannot go through the bundler (its JS glue uses import.meta and Terser refuses it), so
+# it is served from public/ — but it is a dependency's files, and committing several megabytes that
+# `npm ci` already puts on disk is how a repo doubles in size for nothing.
+/public/mediapipe/

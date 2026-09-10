@@ -18,6 +18,8 @@ import { EmoteController } from "@/features/emoteController/emoteController";
  * the model cannot be fitted, and never throws inside the render loop.
  */
 import { StatisticalIdleAnimation } from "@/features/proceduralAnimation/statisticalIdle";
+import { createFaceTracker, type FaceTracker } from "@/features/faceTracking/faceTracker";
+import { createFaceDriver, type FaceDriver } from "@/features/faceTracking/faceDriver";
 import { applyKamikoLook } from "@/features/vrmViewer/kamikoLook";
 import { Screenplay } from "@/features/chat/messages";
 import { downscaleModelTextures, logTextureInfo } from '@/utils/textureDownscaler';
@@ -34,6 +36,13 @@ export class Model {
   public mixer?: THREE.AnimationMixer;
   public emoteController?: EmoteController;
   public proceduralAnimation?: StatisticalIdleAnimation;
+  /**
+   * OPERATOR PUPPETEERING (src/features/faceTracking). Built lazily on the first startFaceTracking()
+   * so a visitor who never turns it on pays for none of it — not the module, not the WASM, not the
+   * face model.
+   */
+  private _faceTracker?: FaceTracker;
+  private _faceDriver?: FaceDriver;
 
   private _lookAtTargetParent: THREE.Object3D;
   public _lipSync?: LipSync;
@@ -451,6 +460,13 @@ export class Model {
   }
 
   public update(delta: number): void {
+    /*
+     * IS SHE SPEAKING RIGHT NOW? Derived from the mouth audio this block already computes, rather
+     * than from a flag set somewhere else: the puppeteering driver hands the mouth back to the
+     * lip-sync while she talks, and the only signal that is never wrong about that is the audio
+     * that is actually driving the mouth on this frame.
+     */
+    let speaking = false;
     if (this._lipSync) {
       // Viseme mouth when airi's wLipSync worklet is running; the original volume mouth when it
       // is not (insecure context, no AudioWorklet). Both paths are decided per frame, so a
@@ -458,10 +474,23 @@ export class Model {
       const vowels = this._lipSync.vowelFrame(delta);
       if (vowels) {
         this.emoteController?.lipSyncVisemes(vowels);
+        speaking = true;
       } else {
         const { volume } = this._lipSync.update();
         this.emoteController?.lipSync("aa", volume);
+        // A small floor, not `> 0`: an idle analyser floats on noise, and a mouth that is "speaking"
+        // at 0.001 would keep the operator's jaw locked out for the whole show.
+        speaking = volume > 0.02;
       }
+    }
+
+    /*
+     * The operator's face, BEFORE vrm.update — so the expression values reach the mesh on this
+     * frame rather than one behind. It writes only what nothing else owns (eyes, brows, and the
+     * mouth while she is silent); see faceDriver.ts for why each of those is safe to take.
+     */
+    if (this.vrm && this._faceDriver) {
+      this._faceDriver.applyExpressions(this.vrm, this._faceTracker?.latest() ?? null, delta, speaking);
     }
 
     this.emoteController?.update(delta);
@@ -474,5 +503,42 @@ export class Model {
     if (config("animation_procedural") === "true") {
       this.proceduralAnimation?.update(delta);
     }
+
+    /*
+     * The head, AFTER the idle. Both write the same bone, and while an operator is driving, the
+     * operator's value is the head — so this runs last and wins, rather than adding to a pose the
+     * idle already moved and drifting further off centre the longer the show runs.
+     */
+    if (this.vrm && this._faceDriver) {
+      this._faceDriver.applyHead(this.vrm, this._faceTracker?.latest() ?? null, delta);
+    }
+  }
+
+  /**
+   * Start driving her face from `video` (the operator's camera).
+   *
+   * Returns false when the tracker could not start — a refused camera, a WASM 404, a model
+   * download that failed — with the reason on `faceTrackingError()`. It never throws: this is
+   * called from a UI toggle, and a rejection there would take out the stage.
+   */
+  public async startFaceTracking(video: HTMLVideoElement): Promise<boolean> {
+    if (!this._faceTracker) this._faceTracker = createFaceTracker();
+    if (!this._faceDriver) this._faceDriver = createFaceDriver();
+    this._faceDriver.reset();
+    return this._faceTracker.start(video);
+  }
+
+  /** Stop driving her face. The driver eases her back to neutral over the next few frames. */
+  public stopFaceTracking(): void {
+    this._faceTracker?.stop();
+    this._faceDriver?.reset();
+  }
+
+  public isFaceTracking(): boolean {
+    return this._faceTracker?.running() ?? false;
+  }
+
+  public faceTrackingError(): string {
+    return this._faceTracker?.lastError() ?? '';
   }
 }

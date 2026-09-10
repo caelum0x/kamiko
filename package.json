@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "npm run generate:paths && npm run build:workers && next dev",
-    "build": "npm run generate:paths && npm run build:workers && next build",
+    "dev": "npm run generate:paths && npm run copy:mediapipe && npm run build:workers && next dev",
+    "build": "npm run generate:paths && npm run copy:mediapipe && npm run build:workers && next build",
     "build:workers": "npm run build:worker:generateMeshBVH",
     "build:worker:generateMeshBVH": "esbuild src/workers/bvh/generateMeshBVH.worker.js --bundle --minify --sourcemap --outfile=public/generateMeshBVH.worker.js",
-    "start": "npm run generate:paths && next start",
+    "start": "npm run generate:paths && npm run copy:mediapipe && next start",
     "export": "npm run generate:paths && next export",
     "build:site": "NEXT_OUTPUT=export NEXT_PUBLIC_KILL_SW=true NEXT_PUBLIC_NPC_API= NEXT_PUBLIC_NPC_REGISTRY= NEXT_PUBLIC_NPC_TIP_WALLET= NEXT_PUBLIC_VRM_HASH=/vrm/AvatarSample_B.vrm NEXT_PUBLIC_CHATBOT_BACKEND=preflight NEXT_PUBLIC_SHOW_INTRODUCTION=false NEXT_PUBLIC_SHOW_ADD_TO_HOMESCREEN=false npm run build && cp killswitch-sw.js out/sw.js && rm -f out/workbox-*.js out/workbox-*.js.map out/sw.js.map out/swe-worker-*.js",
     "deploy:site": "npm run build:site && wrangler deploy",
@@ -18,7 +18,8 @@
     "act": "act -j test",
     "tauri": "tauri",
     "generate:paths": "node scripts/generate_paths.js",
-    "splash": "cp ./public/splashscreen.html out/"
+    "splash": "cp ./public/splashscreen.html out/",
+    "copy:mediapipe": "node scripts/copy_mediapipe.js"
   },
   "dependencies": {
     "@charcoal-ui/icons": "^3.15.0",
@@ -27,6 +28,7 @@
     "@headlessui/react": "^2.1.8",
     "@heroicons/react": "^2.1.5",
     "@iwer/devui": "^0.1.1",
+    "@mediapipe/tasks-vision": "^1.0.1",
     "@mkkellogg/gaussian-splats-3d": "^0.4.5",
     "@moeru/eventa": "^1.0.0",
     "@moeru/std": "^0.1.0-beta.17",

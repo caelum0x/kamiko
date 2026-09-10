@@ -16,10 +16,17 @@ WIRED into the product (imported by code that renders):
 These four are all that remain here — everything wired above typechecks and is included in the build.
 
 DELETED (2026-09-05, upstream reference stays in apps/airi): better-ws, core-agent, dualsense,
-fonts, gamepad, i18n, live2d, mediapipe, memory-pgvector, plugin-sdk, plugin-sdk-tamagotchi,
+fonts, gamepad, i18n, live2d, memory-pgvector, plugin-sdk, plugin-sdk-tamagotchi,
 server-runtime, server-sdk — each either duplicated a service this repo already ships (agent
 brain, memory, servers) or targeted hardware/runtimes this product has no surface for
-(controllers, webcam tracking, Live2D, airi's Vue/Electron plugin hosts).
+(controllers, Live2D, airi's Vue/Electron plugin hosts).
+
+`mediapipe` WAS on that list, deleted on the grounds that there was no surface for webcam
+tracking. There is one now — the stage has a camera, for vision — so operator puppeteering was
+written fresh against `@mediapipe/tasks-vision` rather than re-ported: see
+`src/features/faceTracking/`. It maps ARKit blendshapes onto VRM expressions and the humanoid head
+bone, and it is careful about what it does NOT take (the emotion presets stay the character's, and
+the mouth goes back to the lip-sync the moment she speaks).
 
 DELETED (2026-09-10, upstream reference stays in apps/airi): ccc (character-card v3 codec),
 server-shared, plugin-protocol — merged but never imported by any product code, so they only
