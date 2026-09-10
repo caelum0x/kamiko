@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { useRouter } from "next/router";
@@ -28,6 +29,8 @@ import {
   CurrencyDollarIcon,
   ShieldCheckIcon,
   UserGroupIcon,
+  FaceSmileIcon,
+  PhotoIcon,
 } from "@heroicons/react/24/outline";
 
 import { MenuButton } from "@/components/menuButton";
@@ -50,7 +53,17 @@ import { Message, Role } from "@/features/chat/messages";
 import { ChatContext } from "@/features/chat/chatContext";
 import { textsToScreenplay } from "@/features/chat/messages";
 import { TapToWake, MarketHud } from "@/components/tapToWake";
+import { EmoteBar } from "@/components/emoteBar";
+import { BackdropPicker } from "@/components/backdropPicker";
 import { AlertContext } from "@/features/alert/alertContext";
+import { EMOTES, type Emote } from "@/features/emote/emotes";
+import { marketEmoteFor, type PulseBand } from "@/features/emote/marketEmote";
+import {
+  activeBackdropId,
+  applyBackground,
+  resolveBackground,
+  type Backdrop,
+} from "@/features/stage/background";
 
 import { config, updateConfig } from '@/utils/config';
 import { isTauri } from '@/utils/isTauri';
@@ -177,6 +190,58 @@ export default function Home() {
       console.error("tap-to-wake could not speak the line", e);
     }
   }, [bot, chatSpeaking]);
+
+  /**
+   * PLAY AN EMOTE ON THE AVATAR — the one door every emote trigger goes through.
+   *
+   * Three things want to make her do a gesture: the tray a visitor presses, the live tape crossing
+   * a threshold, and her own reply carrying a `[peace]`-style tag (that last one is handled deeper,
+   * in Model.speak, because it has to land on the same beat as the sentence's audio).
+   *
+   * WHILE SHE IS SPEAKING, THE CHAT OWNS HER FACE — the same rule the clicker's mood effect
+   * already follows. An emote's face is held for seconds; dropped on top of a sentence it would
+   * overwrite the expression the screenplay set mid-word. The gesture is simply not played rather
+   * than queued: by the time she finished the sentence, the moment the visitor pressed it for is
+   * gone.
+   */
+  const playEmote = useCallback((emote: Emote) => {
+    if (chatSpeaking) return;
+    const model = bot.viewer?.model;
+    if (!model) return;
+    void model.playEmote(emote).catch((e) => {
+      // A gesture that cannot load its clip is a gesture that does not happen — never a dead stage.
+      console.error("emote could not be played", e);
+    });
+  }, [bot, chatSpeaking]);
+
+  /**
+   * The tape moved far enough to be worth a reaction. Called on every successful `/market` read.
+   *
+   * The decision itself is pure and tested (features/emote/marketEmote.ts): it fires on a CROSSING
+   * of ±5%, not on a level, so a pump gets one stonks pose rather than one per sixty-second poll.
+   */
+  const onMarketSnapshot = useCallback((snapshot: Parameters<typeof marketEmoteFor>[1]) => {
+    const { emote, band } = marketEmoteFor(marketBand.current, snapshot);
+    marketBand.current = band;
+    if (emote) playEmote(EMOTES[emote]);
+  }, [playEmote]);
+
+  /** Write a chosen backdrop to config and repaint. One rule, one applier, one place. */
+  const pickBackdrop = useCallback((backdrop: Backdrop) => {
+    // A backdrop and a background VIDEO are mutually exclusive — an iframe over the body wins
+    // whatever the body is painted, so choosing a scene has to end the video, as the settings
+    // pages have always done.
+    updateConfig("youtube_videoid", "");
+    if (backdrop.kind === 'color') {
+      updateConfig("bg_url", "");
+      updateConfig("bg_color", backdrop.value);
+    } else {
+      updateConfig("bg_color", "");
+      updateConfig("bg_url", backdrop.value);
+    }
+    applyBackground(resolveBackground(config("bg_color"), config("bg_url")), document.body);
+    setBackdropId(activeBackdropId(config("bg_color"), config("bg_url")));
+  }, []);
   const [chatProcessing, setChatProcessing] = useState(false);
   const [chatLog, setChatLog] = useState<Message[]>([]);
   const [assistantMessage, setAssistantMessage] = useState("");
@@ -206,6 +271,17 @@ export default function Home() {
   const [showChatMode, setShowChatMode] = useState(false);
   const [showMoshi, setShowMoshi] = useState(false);
   const [showTapToWake, setShowTapToWake] = useState(false);
+  const [showEmotes, setShowEmotes] = useState(false);
+  const [showBackdrops, setShowBackdrops] = useState(false);
+  /** The active backdrop, mirrored into state only so the picker can paint its selected tile. */
+  const [backdropId, setBackdropId] = useState('');
+  /*
+   * WHICH SIDE OF THE TAPE SHE WAS LAST ON. `null` until the first reading lands, which is what
+   * stops a visitor who arrives mid-drawdown from being met by an avatar already mid-breakdown —
+   * see features/emote/marketEmote.ts. A ref, not state: it must not re-render the stage, and the
+   * poll that writes it is a callback from a child.
+   */
+  const marketBand = useRef<PulseBand | null>(null);
 
   // null indicates havent loaded config yet
   const [muted, setMuted] = useState<boolean|null>(null);
@@ -226,11 +302,14 @@ export default function Home() {
 
     setShowArbiusIntroduction(config("show_arbius_introduction") === 'true');
 
-    if (config("bg_color") !== '') {
-      document.body.style.backgroundColor = config("bg_color");
-    } else {
-      document.body.style.backgroundImage = `url(${config("bg_url")})`;
-    }
+    /*
+     * THE BACKDROP, through the one function that decides it (features/stage/background.ts).
+     * This block used to be the rule's second implementation and the one that disagreed: it set a
+     * colour without clearing the image and an image without clearing the colour, so the two keys
+     * could both be live at once. With bg_color now shipping empty, a fresh visit lands on the room.
+     */
+    applyBackground(resolveBackground(config("bg_color"), config("bg_url")), document.body);
+    setBackdropId(activeBackdropId(config("bg_color"), config("bg_url")));
     // Temp Disable : WebXR
     // if (window.navigator.xr && window.navigator.xr.isSessionSupported) {
     //   let deviceInfo = detectVRHeadset();
@@ -354,7 +433,28 @@ export default function Home() {
         openLink={(url) => {
           try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* popup blocked */ }
         }}
+        onSnapshot={onMarketSnapshot}
       />
+
+      {/*
+        THE STAGE TRAYS — emotes and backdrops, under the HUD on the right.
+        Deliberately not in the settings menu: both are things you reach for WHILE watching her, and
+        the left column, the speech bubble (bottom centre) and the chat input are all already spoken
+        for. Each is capped at half the viewport and scrolls inside itself, so ten scenes and ten
+        emotes still fit a 390px phone.
+      */}
+      {(showEmotes || showBackdrops) && (
+        <div className="pointer-events-none fixed right-2 top-20 z-20 flex flex-col items-end gap-2">
+          {showEmotes && <EmoteBar onPlay={playEmote} onClose={() => setShowEmotes(false)} />}
+          {showBackdrops && (
+            <BackdropPicker
+              activeId={backdropId}
+              onPick={pickBackdrop}
+              onClose={() => setShowBackdrops(false)}
+            />
+          )}
+        </div>
+      )}
 
       {/* main menu */}
       <div className="absolute z-10 m-2">
@@ -463,6 +563,25 @@ export default function Home() {
               icon={CursorArrowRaysIcon}
               onClick={() => setShowTapToWake((v) => !v)}
               label="tap to wake her"
+            />
+            {/*
+              EMOTES AND THE BACKDROP, on the front door.
+              The emote vocabulary is features/emote/emotes.ts; the backdrop picker is the ten
+              bundled scenes that were unreachable while bg_color defaulted to ink (see
+              features/stage/background.ts for that bug). Both are stage furniture, so they toggle
+              a tray over the avatar rather than navigating anywhere.
+            */}
+            <MenuButton
+              large={isVRHeadset}
+              icon={FaceSmileIcon}
+              onClick={() => setShowEmotes((v) => !v)}
+              label="emotes"
+            />
+            <MenuButton
+              large={isVRHeadset}
+              icon={PhotoIcon}
+              onClick={() => setShowBackdrops((v) => !v)}
+              label="change the background"
             />
             <MenuButton
               large={isVRHeadset}

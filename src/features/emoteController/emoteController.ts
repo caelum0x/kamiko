@@ -17,6 +17,24 @@ export class EmoteController {
     this._expressionController.playEmotion(preset);
   }
 
+  /**
+   * The FACE half of an emote — several expressions held together for a fixed beat, then handed
+   * back to the emotion underneath. See ExpressionController.playEmoteFace for who wins the mouth.
+   */
+  public playEmoteFace(weights: Readonly<Record<string, number>>, holdSeconds: number) {
+    this._expressionController.playEmoteFace(weights, holdSeconds);
+  }
+
+  /** The expression names the loaded VRM really has — emotes are resolved against this. */
+  public get availableExpressions(): ReadonlySet<string> {
+    return this._expressionController.availableExpressions;
+  }
+
+  /** Whether an emote is holding the face right now. */
+  public get emoteActive(): boolean {
+    return this._expressionController.emoteActive;
+  }
+
   public lipSync(preset: VRMExpressionPresetName | string, value: number) {
     this._expressionController.lipSync(preset, value);
   }

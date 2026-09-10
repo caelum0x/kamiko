@@ -136,6 +136,16 @@ export class StatisticalIdleAnimation {
   /** Seconds for the mood to close ~63% of the gap to its target. */
   private static readonly MOOD_TAU_S = 0.8
 
+  /**
+   * How much of the driven rig a gesture currently owns, and where it is heading. See
+   * `setGestureWeight` for why the idle has to be able to step aside at all.
+   */
+  private gestureTarget = 0
+  private gestureWeightCurrent = 0
+
+  /** Seconds for the gesture handover to close ~63% of the gap — a quick, unnoticeable crossfade. */
+  private static readonly GESTURE_TAU_S = 0.18
+
   constructor(vrm: VRM, seed = 1) {
     this.vrm = vrm
     try {
@@ -166,6 +176,33 @@ export class StatisticalIdleAnimation {
     this.moodTarget = moodFor(emotion)
   }
 
+  /**
+   * HAND THE BONES TO A GESTURE, AND TAKE THEM BACK.
+   *
+   * This driver is authoritative over the idle's channels — spine, neck, both upper arms, both
+   * legs — and it writes them every single frame. That is exactly right when nothing else is
+   * moving her, and it is why playing a `.vrma` emote used to come out broken: the mixer would put
+   * her right hand beside her eye and this pass, running immediately after, would drop the SHOULDER
+   * back to its resting `base` on the same frame. A bent elbow hanging off a lowered arm is not a
+   * peace sign.
+   *
+   * `weight` is how much of the bone the gesture owns: at 1 this pass writes nothing (it eases each
+   * channel toward the value already in the node, which the mixer just wrote — a no-op), at 0 the
+   * idle is authoritative as before, and in between the two crossfade. The caller eases it up as
+   * the clip fades in and back down as it fades out, so neither handover snaps.
+   *
+   * Out-of-range and non-finite values clamp to [0, 1] rather than being trusted: this scales a
+   * write to a humanoid rig, and a NaN here would freeze every driven bone for the rest of the show.
+   */
+  public setGestureWeight(weight: number): void {
+    this.gestureTarget = Number.isFinite(weight) ? clamp(weight, 0, 1) : 0
+  }
+
+  /** How much of the rig a gesture currently owns (exposed for tests). */
+  public get gestureWeight(): number {
+    return this.gestureWeightCurrent
+  }
+
   /** The eased temperament the current frame runs at (exposed for tests). */
   public get currentMood(): Readonly<IdleMood> {
     return this.mood
@@ -188,6 +225,15 @@ export class StatisticalIdleAnimation {
     const humanoid = this.vrm?.humanoid
     if (!humanoid) return
 
+    // Ease the gesture handover on the same clock as the mood, so a clip fading in over half a
+    // second does not fight an idle that gives up its bones instantly.
+    const gEase = 1 - Math.exp(-rawDt / StatisticalIdleAnimation.GESTURE_TAU_S)
+    this.gestureWeightCurrent += (this.gestureTarget - this.gestureWeightCurrent) * gEase
+    if (Math.abs(this.gestureTarget - this.gestureWeightCurrent) < 1e-4) {
+      this.gestureWeightCurrent = this.gestureTarget
+    }
+    const idleShare = 1 - this.gestureWeightCurrent
+
     const values = this.sample(dt)
     for (let i = 0; i < CHANNELS.length; i++) {
       const c = CHANNELS[i]
@@ -196,7 +242,15 @@ export class StatisticalIdleAnimation {
       // Sway scales the deviation from the base pose, and the hard envelope still has the last
       // word — a mood can lean on the clamp, never through it.
       const swayed = c.base + (values[i] - c.base) * this.mood.sway
-      node.rotation[c.axis] = clamp(swayed, c.base - c.limit, c.base + c.limit)
+      const idleValue = clamp(swayed, c.base - c.limit, c.base + c.limit)
+      if (idleShare >= 1) {
+        node.rotation[c.axis] = idleValue
+        continue
+      }
+      // Whatever is in the node right now is the gesture's answer for this channel (the mixer ran
+      // immediately before this pass). Blend toward the idle by the share the idle still owns.
+      const held = node.rotation[c.axis]
+      node.rotation[c.axis] = Number.isFinite(held) ? held + (idleValue - held) * idleShare : idleValue
     }
   }
 

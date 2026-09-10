@@ -20,9 +20,17 @@ export const defaults = {
   show_introduction: process.env.NEXT_PUBLIC_SHOW_INTRODUCTION ?? 'true',
   show_arbius_introduction: process.env.NEXT_PUBLIC_SHOW_ARBIUS_INTRODUCTION ?? 'false',
   show_add_to_homescreen: process.env.NEXT_PUBLIC_SHOW_ADD_TO_HOMESCREEN ?? 'true',
-  // Moody on-brand stage: BRAND ink. index.tsx applies bg_color when set (over the bg_url image), so
-  // she stands rim-lit against near-black — the neon-red eye + rim read as a hero shot, not a room.
-  bg_color: process.env.NEXT_PUBLIC_BG_COLOR ?? '#06060b',
+  /*
+   * THE STAGE BACKDROP. The rule (features/stage/background.ts, and what both settings pages have
+   * always written for): a non-empty bg_color wins, otherwise bg_url is drawn.
+   *
+   * bg_color therefore ships EMPTY, and it is not a style choice — it is the fix for a stage that
+   * was black for everyone. It used to default to BRAND ink (#06060b) alongside a non-empty bg_url,
+   * so the colour won on every fresh visit and the ten bundled backgrounds could not be seen without
+   * three levels of settings menu. A deployment that wants the rim-lit hero shot back sets
+   * NEXT_PUBLIC_BG_COLOR=#06060b; a visitor gets it from the first swatch in the on-stage picker.
+   */
+  bg_color: process.env.NEXT_PUBLIC_BG_COLOR ?? '',
   bg_url: process.env.NEXT_PUBLIC_BG_URL ?? '/bg/bg-room2.jpg',
   // Kamiko's canonical model path. `public/vrm/npc.vrm` is the character's model (a placeholder VRoid
   // sample today; drop the authored Kamiko VRM in at this path and it goes live with no config change).

@@ -574,6 +574,8 @@ export class Chat {
 
     let aiTextLog = "";
     let tag = "";
+    // The emote tag of this reply, carried across chunks until a full sentence consumes it once.
+    let emote = "";
     let isThinking = false;
     let rolePlay = "";
     let receivedMessage = "";
@@ -604,6 +606,7 @@ export class Chat {
           aiTextLog,
           receivedMessage,
           tag,
+          emote,
           isThinking,
           rolePlay,
           callback: (aiTalks: Screenplay[]): boolean => {
@@ -640,6 +643,7 @@ export class Chat {
         aiTextLog = proc.aiTextLog;
         receivedMessage = proc.receivedMessage;
         tag = proc.tag;
+        emote = proc.emote;
         isThinking = proc.isThinking;
         rolePlay = proc.rolePlay;
         if (proc.shouldBreak) {

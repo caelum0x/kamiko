@@ -31,6 +31,10 @@ export function MenuButton({
       <button
         disabled={disabled}
         onClick={onClick}
+        /* The icon is aria-hidden and the <span> below is `hidden`, so without this the button had
+           no accessible name at all — every control on the stage announced as "button". */
+        aria-label={label}
+        title={label}
       >
         <Icon
           className={clsx(

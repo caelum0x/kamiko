@@ -53,13 +53,20 @@ const getConfig = createJestConfig(config)
  * next/jest force-prepends a blanket `/node_modules/` ignore pattern, and since a file is skipped
  * when it matches ANY transformIgnorePattern, a plain negative-lookahead entry can never override
  * it. So we resolve next/jest's config and replace transformIgnorePatterns wholesale: whitelist just
- * these four packages for SWC transformation (everything else in node_modules stays ignored), and
+ * these packages for SWC transformation (everything else in node_modules stays ignored), and
  * keep next's CSS-module ignore rule. This is Next.js's documented workaround for ESM deps.
+ *
+ * `three` is on the list for the same reason and a wider consequence. `three/examples/jsm/**` is
+ * ESM-only, and `src/utils/config.ts` reaches it through a chain nobody would guess from the import
+ * (config → externalAPI → amicaLife/eventHandler → loadVRMAnimation → GLTFLoader). So ANY test that
+ * touched the app's configuration defaults died with "Cannot use import statement outside a module",
+ * which quietly put every default — the background the stage boots with among them — out of reach
+ * of the suite.
  */
 export default async () => {
   const resolved = await getConfig()
   resolved.transformIgnorePatterns = [
-    'node_modules/(?!(?:@moeru|clustr|nanoid)/)',
+    'node_modules/(?!(?:@moeru|clustr|nanoid|three)/)',
     '^.+\\.module\\.(css|sass|scss)$',
   ]
   return resolved

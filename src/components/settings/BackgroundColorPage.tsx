@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { BasicPage, FormRow, ResetToDefaultButton } from './common';
 import { TextInput } from '@/components/textInput';
 import { SwitchBox } from '@/components/switchBox';
+import { applyBackground, resolveBackground, INK } from "@/features/stage/background";
 import { config, updateConfig, defaultConfig } from "@/utils/config";
 
 export function BackgroundColorPage({
@@ -15,6 +16,15 @@ export function BackgroundColorPage({
   setSettingsUpdated: (updated: boolean) => void;
 }) {
   const { t } = useTranslation();
+
+  /*
+   * `bg_color` now DEFAULTS TO EMPTY — that is what makes the bundled backgrounds reachable (see
+   * features/stage/background.ts). `<input type="color">` cannot hold an empty value: React logs a
+   * warning and the browser silently substitutes #000000, so the swatch would claim she is on black
+   * while she is standing in the room. The picker shows ink as the colour it would apply, and the
+   * "no background color set" line above says which of the two is actually live.
+   */
+  const swatch = bgColor === '' ? INK : bgColor;
 
   return (
     <BasicPage
@@ -31,10 +41,9 @@ export function BackgroundColorPage({
               <input
                 className={"block bg-white border-0 outline-none focus:ring-0 focus:border-gray-300 rounded-md shadow-sm w-20"}
                 type="color"
-                value={bgColor}
+                value={swatch}
                 onChange={(event: React.ChangeEvent<any>) => {
-                  document.body.style.backgroundImage = `none`;
-                  document.body.style.backgroundColor = event.target.value;
+                  applyBackground({ kind: 'color', color: event.target.value }, document.body);
                   updateConfig("youtube_videoid", "");
                   updateConfig("bg_url", "");
                   updateConfig("bg_color", event.target.value);
@@ -47,13 +56,16 @@ export function BackgroundColorPage({
                 value={bgColor === 'transparent'}
                 label="Transparent"
                 onChange={(value: boolean) => {
-                  document.body.style.backgroundImage = `none`;
-                  document.body.style.backgroundColor = value ? 'transparent' : config("bg_color");
+                  // Leaving "transparent" has to land on a REAL colour: config("bg_color") is
+                  // 'transparent' at that moment, so the old code turned the switch off and left
+                  // the page transparent forever.
+                  const next = value ? 'transparent' : INK;
+                  applyBackground({ kind: 'color', color: next }, document.body);
                   updateConfig("youtube_videoid", "");
                   updateConfig("bg_url", "");
-                  updateConfig("bg_color", value ? 'transparent' : config("bg_color"));
+                  updateConfig("bg_color", next);
 
-                  setBgColor(value ? 'transparent' : config("bg_color"));
+                  setBgColor(next);
                   setSettingsUpdated(true);
                 }}
               />
@@ -62,10 +74,14 @@ export function BackgroundColorPage({
             { bgColor !== defaultConfig("bg_color") && (
               <p className="mt-2">
                 <ResetToDefaultButton onClick={() => {
-                  document.body.style.backgroundImage = `none`;
-                  document.body.style.backgroundColor = defaultConfig("bg_color");
-                  setBgColor(defaultConfig("bg_color"));
+                  // The default is now "no colour", i.e. hand the stage back to the background
+                  // image — which is exactly what resetting a colour ought to mean.
                   updateConfig("bg_color", defaultConfig("bg_color"));
+                  applyBackground(
+                    resolveBackground(defaultConfig("bg_color"), config("bg_url")),
+                    document.body,
+                  );
+                  setBgColor(defaultConfig("bg_color"));
                   setSettingsUpdated(true);
                   }}
                 />

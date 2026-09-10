@@ -105,6 +105,12 @@ export default function Import() {
       updateConfig('vision_system_prompt', defaultConfig('vision_system_prompt'));
     }
 
+    /*
+     * An imported character brings its own backdrop, and a colour left over from THIS visitor's
+     * settings would win over it (features/stage/background.ts: a non-empty bg_color beats bg_url).
+     * Importing a character is a wholesale swap, so the colour goes with the rest of it.
+     */
+    updateConfig('bg_color', '');
     if (bgUrl) {
       updateConfig('bg_url', bgUrl as string);
     } else {

@@ -92,6 +92,15 @@ export interface MarketHudProps {
   /** Open the Solscan link the host's way — same reason TapToWake takes one: only the host knows
    *  how a link leaves this origin (new tab, noopener, BASE_PATH). */
   openLink?: (url: string) => void;
+  /**
+   * Every SUCCESSFUL `/market` read, handed to the host.
+   *
+   * The tape used to stop here — two numbers in a chip, and the avatar under them unaware that the
+   * chart had moved 15%. This is the hand-off that lets her react to it (the host turns a crossing
+   * into an emote; see features/emote/marketEmote.ts). It fires only on a read that landed, so a
+   * throttle or a dead upstream produces silence rather than a fake "flat".
+   */
+  onSnapshot?: (snapshot: MarketResp) => void;
 }
 
 /**
@@ -106,9 +115,17 @@ export interface MarketHudProps {
  * Mobile-safe at 390px: pinned top-right (the menu is top-left, the chat input is at the bottom),
  * compact, and wraps rather than pushing width.
  */
-export function MarketHud({ openLink }: MarketHudProps) {
+export function MarketHud({ openLink, onSnapshot }: MarketHudProps) {
   const [quote, setQuote] = useState<MarketQuote | null>(null);
   const [tape, setTape] = useState<TokenTape | null>(null);
+
+  /*
+   * The callback is held in a ref so a host that passes an inline arrow does not restart the poll
+   * on every one of its own renders — which, with a 60s interval and a `void load()` on mount,
+   * would turn the HUD into a request per keystroke on the page behind it.
+   */
+  const snapshotRef = useRef(onSnapshot);
+  snapshotRef.current = onSnapshot;
 
   useEffect(() => {
     if (!API) return; // no funnel API configured — nothing to show, stay hidden.
@@ -121,6 +138,13 @@ export function MarketHud({ openLink }: MarketHudProps) {
       if (!r.ok) return;
       if (r.data?.quote) setQuote(r.data.quote);
       if (r.data?.tokenTape) setTape(r.data.tokenTape);
+      if (r.data) {
+        try {
+          snapshotRef.current?.(r.data);
+        } catch {
+          /* a host that throws on a tick must not kill the poll that feeds the HUD */
+        }
+      }
     };
     void load();
     const id = setInterval(() => void load(), 60_000);

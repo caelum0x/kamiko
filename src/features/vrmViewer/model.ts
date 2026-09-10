@@ -21,6 +21,9 @@ import { StatisticalIdleAnimation } from "@/features/proceduralAnimation/statist
 import { createFaceTracker, type FaceTracker } from "@/features/faceTracking/faceTracker";
 import { createFaceDriver, type FaceDriver } from "@/features/faceTracking/faceDriver";
 import { applyKamikoLook } from "@/features/vrmViewer/kamikoLook";
+import { loadVRMAnimation } from "@/lib/VRMAnimation/loadVRMAnimation";
+import { buildGestureClip } from "@/features/emote/gestureClip";
+import { EMOTES, resolveFace, type Emote, type GestureClip } from "@/features/emote/emotes";
 import { Screenplay } from "@/features/chat/messages";
 import { downscaleModelTextures, logTextureInfo } from '@/utils/textureDownscaler';
 import { OptimizedGLTFLoader } from '@/utils/gltfOptimizer';
@@ -48,6 +51,20 @@ export class Model {
   public _lipSync?: LipSync;
 
   public _currentAction?: THREE.AnimationAction;
+
+  /**
+   * THE RUNNING EMOTE GESTURE, and its fade-out, both clocked by the RENDER LOOP rather than by
+   * `setTimeout`. A backgrounded tab stops requestAnimationFrame and keeps firing timers, so a
+   * timer-driven gesture ends while the mixer that is playing it is frozen — the avatar comes back
+   * to a foreground tab mid-pose with nothing left to take her out of it.
+   */
+  private _gesture?: { action: THREE.AnimationAction; fadeLeft: number };
+
+  /** Seconds left of the emote's borrowed idle temperament (see playEmote). */
+  private _emoteMoodLeft = 0;
+
+  /** Seconds the gesture crossfades in and out over — short enough to read as one motion. */
+  private static readonly GESTURE_FADE_S = 0.4;
 
   constructor(lookAtTargetParent: THREE.Object3D) {
     this._lookAtTargetParent = lookAtTargetParent;
@@ -296,6 +313,10 @@ export class Model {
   }
 
   public unLoadVrm() {
+    // A gesture in flight holds a mixer action bound to bones that are about to be disposed, and
+    // its render-loop fade-out would keep ticking against a null VRM.
+    this.stopGesture();
+    this._emoteMoodLeft = 0;
     if (this.vrm) {
       VRMUtils.deepDispose(this.vrm.scene);
       this.vrm = null;
@@ -324,8 +345,17 @@ export class Model {
     this._currentAction.play();
   }
 
+  /**
+   * Cross-fade to `destAction`. `undefined` means "fade the current action out and leave the rig to
+   * whoever else is writing it" — with the statistical idle on (the default) there IS no idle
+   * action to return to, and the previous version dereferenced `this._currentAction` unconditionally
+   * right here. That is not a hypothetical: `playAnimation` captured `this._currentAction!` as the
+   * action to restore, so every `.vrma` played on a default install threw a TypeError inside the
+   * mixer's `finished` handler, which is how amicaLife's idle-animation event and the /api SSE
+   * `animation` message both ended.
+   */
   private async fadeToAction(
-    destAction: THREE.AnimationAction,
+    destAction: THREE.AnimationAction | undefined,
     duration: number,
   ) {
     let previousAction = this._currentAction;
@@ -336,7 +366,7 @@ export class Model {
     }
 
     this._currentAction
-      .reset()
+      ?.reset()
       .setEffectiveTimeScale(1)
       .setEffectiveWeight(1)
       .fadeIn(0.5)
@@ -425,7 +455,7 @@ export class Model {
       this.modifyAnimationPosition(clip, weight);
     }
 
-    const idleAction = this._currentAction!;
+    const idleAction = this._currentAction;
     const VRMAaction = mixer.clipAction(clip);
     VRMAaction.clampWhenFinished = true;
     VRMAaction.loop = THREE.LoopOnce;
@@ -447,11 +477,119 @@ export class Model {
   }
 
   /**
+   * PLAY AN EMOTE — the named gesture the stage never had.
+   *
+   * `playEmotion` above can put a mood on her face and colour the idle with it, and that is all it
+   * can do: one expression, one weight, no body. An emote is the deliberate version — several
+   * expressions held together (a wink is an eyelid AND half a smile), optionally over a slice of an
+   * authored clip, for a fixed beat, and then everything handed back. See features/emote/emotes.ts.
+   *
+   * IT DEGRADES IN BOTH DIRECTIONS, because a visitor can swap the model out from under it:
+   *   - no expression of the emote's exists on this VRM ⇒ fall back to the emote's mood, which is
+   *     an ordinary emotion tag and works on any model;
+   *   - the clip 404s, or slices to nothing ⇒ the face half still plays. An emote is never a throw
+   *     on the stage.
+   */
+  public async playEmote(emote: Emote): Promise<void> {
+    const face = resolveFace(emote, this.emoteController?.availableExpressions);
+    if (Object.keys(face).length > 0) {
+      this.emoteController?.playEmoteFace(face, emote.holdSeconds);
+    } else {
+      this.emoteController?.playEmotion(emote.mood);
+    }
+
+    // The body idles in the emote's temperament for as long as the emote lasts, then goes back to
+    // whatever emotion her face is actually wearing (update() below owns that clock).
+    this.proceduralAnimation?.setEmotion(emote.mood);
+    this._emoteMoodLeft = Math.max(emote.holdSeconds, 0);
+
+    if (emote.gesture) {
+      await this.playGesture(emote.gesture, emote.id);
+    } else {
+      this.stopGesture();
+    }
+  }
+
+  /**
+   * The BODY half: a window of one bundled `.vrma`, cross-faded in over the idle and out again.
+   *
+   * Two things make this different from `playAnimation` below, and both are the reason emotes could
+   * not be built on it. It does not need an idle ACTION to return to — with the statistical idle on
+   * (the default) the mixer holds no idle action at all, so `playAnimation`'s `this._currentAction!`
+   * is `undefined` and its restore throws. And it tells the procedural idle to stand aside for the
+   * duration (`setGestureWeight`), without which the idle rewrites the shoulder every frame and the
+   * gesture comes out as a bent elbow on a lowered arm.
+   *
+   * Returns the seconds the gesture will occupy, 0 when nothing could be played.
+   */
+  public async playGesture(gesture: GestureClip, name: string): Promise<number> {
+    const { vrm, mixer } = this;
+    if (vrm == null || mixer == null) return 0;
+
+    let clip: THREE.AnimationClip | null = null;
+    try {
+      const animation = await loadVRMAnimation(`/animations/${gesture.file}`);
+      if (animation) clip = buildGestureClip(animation, vrm, gesture, `emote:${name}`);
+    } catch {
+      // A missing or unreadable clip is a gesture that does not happen, never a dead render loop.
+      return 0;
+    }
+    if (!clip) return 0;
+
+    // The VRM may have been swapped while the clip was loading.
+    if (this.vrm !== vrm || this.mixer !== mixer) return 0;
+
+    this.stopGesture();
+
+    const action = mixer.clipAction(clip);
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(Model.GESTURE_FADE_S).play();
+
+    this._gesture = { action, fadeLeft: 0 };
+    this.proceduralAnimation?.setGestureWeight(1);
+
+    const onFinished = (event: { action?: THREE.AnimationAction }) => {
+      if (event.action !== action) return;
+      mixer.removeEventListener("finished", onFinished as never);
+      if (this._gesture?.action !== action) return;
+      // Hand the rig back: the action fades toward the pose the mixer saved when it was activated,
+      // and the idle fades back in over it.
+      action.fadeOut(Model.GESTURE_FADE_S);
+      this._gesture.fadeLeft = Model.GESTURE_FADE_S;
+      this.proceduralAnimation?.setGestureWeight(0);
+    };
+    mixer.addEventListener("finished", onFinished as never);
+
+    return clip.duration + Model.GESTURE_FADE_S;
+  }
+
+  /** Cut a running gesture immediately — a new emote, or a model unload. Safe when none is running. */
+  public stopGesture(): void {
+    const running = this._gesture;
+    this._gesture = undefined;
+    this.proceduralAnimation?.setGestureWeight(0);
+    if (!running) return;
+    running.action.stop();
+    this.mixer?.uncacheAction(running.action.getClip());
+  }
+
+  /**
    * 音声を再生し、リップシンクを行う
    */
   public async speak(buffer: ArrayBuffer, screenplay: Screenplay) {
     this.emoteController?.playEmotion(screenplay.expression);
     this.proceduralAnimation?.setEmotion(screenplay.expression);
+    /*
+     * SHE ASKED FOR A GESTURE ON THIS LINE. After the emotion, deliberately: playEmote borrows the
+     * face from whatever emotion is on it, so the emotion has to be set first or the emote restores
+     * the previous one when it lets go. Not awaited — it loads a clip over the network, and the
+     * audio must not wait on that; a failure inside it is already contained (see playEmote).
+     */
+    if (screenplay.emote) {
+      const emote = EMOTES[screenplay.emote];
+      if (emote) void this.playEmote(emote).catch(() => { /* an emote never breaks a line */ });
+    }
     await new Promise((resolve) => {
       this._lipSync?.playFromArrayBuffer(buffer, () => {
         resolve(true);
@@ -502,6 +640,24 @@ export class Model {
     // authored idle), so leaving it in the render loop is safe.
     if (config("animation_procedural") === "true") {
       this.proceduralAnimation?.update(delta);
+    }
+
+    /*
+     * THE EMOTE'S CLOCKS, both on the render loop for the reason given on `_gesture`.
+     *
+     * The gesture's fade-out is finished here rather than by the timer that started it, and the
+     * borrowed idle temperament is returned to whatever emotion her face is actually wearing —
+     * NOT to neutral, which would wipe a mood the chat set while the emote was playing.
+     */
+    if (this._gesture && this._gesture.fadeLeft > 0) {
+      this._gesture.fadeLeft -= Number.isFinite(delta) && delta > 0 ? delta : 0;
+      if (this._gesture.fadeLeft <= 0) this.stopGesture();
+    }
+    if (this._emoteMoodLeft > 0) {
+      this._emoteMoodLeft -= Number.isFinite(delta) && delta > 0 ? delta : 0;
+      if (this._emoteMoodLeft <= 0) {
+        this.proceduralAnimation?.setEmotion(this.emoteController?.currentEmotion ?? "neutral");
+      }
     }
 
     /*

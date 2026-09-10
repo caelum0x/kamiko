@@ -3,6 +3,7 @@ import { clsx } from 'clsx';
 
 import { thumbPrefix } from './common';
 import { bgImages } from "@/paths";
+import { applyBackground } from "@/features/stage/background";
 import { updateConfig } from "@/utils/config";
 import { TextButton } from "@/components/textButton";
 
@@ -26,7 +27,9 @@ export function BackgroundImgPage({
           <button
             key={url}
             onClick={() => {
-              document.body.style.backgroundImage = `url(${url})`;
+              // One applier for the whole app (features/stage/background.ts): writing
+              // backgroundImage alone used to leave a previously-chosen colour painted underneath.
+              applyBackground({ kind: 'image', url }, document.body);
               updateConfig("bg_color", "");
               updateConfig("youtube_videoid", "");
               updateConfig("bg_url", url);

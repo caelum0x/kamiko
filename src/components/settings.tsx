@@ -30,6 +30,7 @@ import { ResetSettingsPage } from './settings/ResetSettingsPage';
 import { DeveloperPage } from './settings/DeveloperPage';
 import { CommunityPage } from './settings/CommunityPage';
 
+import { applyBackground } from "@/features/stage/background";
 import { BackgroundImgPage } from './settings/BackgroundImgPage';
 import { BackgroundColorPage } from './settings/BackgroundColorPage';
 import { BackgroundVideoPage } from './settings/BackgroundVideoPage';
@@ -237,11 +238,16 @@ export const Settings = ({
         const url = e.target?.result;
         if (! url) return;
 
-        document.body.style.backgroundImage = `url(${url})`;
+        applyBackground({ kind: 'image', url: url as string }, document.body);
 
         if ((url as string).length < 2_000_000) {
           updateConfig("youtube_videoid", "");
+          // A colour still on file would win over this image on the next load (see
+          // features/stage/background.ts) — an uploaded background that vanishes on reload.
+          updateConfig("bg_color", "");
           updateConfig("bg_url", url as string);
+          setBgColor("");
+          setBgUrl(url as string);
           setShowNotification(true);
         } else {
           // TODO notify with warning how this cant be saved to localstorage
