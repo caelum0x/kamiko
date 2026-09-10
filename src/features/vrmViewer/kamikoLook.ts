@@ -58,11 +58,26 @@ interface LookMaterial {
 function tintIris(mat: LookMaterial, fallbackName: string): boolean {
   const name = String(mat?.name ?? fallbackName ?? "");
   if (!IRIS_RE.test(name) || EYE_EXCLUDE_RE.test(name)) return false;
-  if (!mat.emissive || typeof mat.emissive.set !== "function") return false;
-  mat.emissive.set(KAMIKO_AWAKE_NEON);
-  mat.emissiveIntensity = Math.max(mat.emissiveIntensity ?? 0, 1.0);
-  mat.needsUpdate = true;
-  return true;
+  let touched = false;
+  // Base colour is what actually reads (MToon emissive barely shows over the brown iris texture, as
+  // the first cut proved). Clear the iris texture and drive the iris from the red factor, the same
+  // way the hair recolour works, so the eye is unmistakably red.
+  if (mat.color && typeof mat.color.set === "function") {
+    if ("map" in mat) mat.map = null;
+    mat.color.set(KAMIKO_AWAKE_NEON);
+    if (mat.shadeColorFactor && typeof mat.shadeColorFactor.set === "function") {
+      mat.shadeColorFactor.set(KAMIKO_AWAKE_NEON);
+    }
+    touched = true;
+  }
+  // …and glow on top of the red base so the awake eye reads as lit in a dark scene.
+  if (mat.emissive && typeof mat.emissive.set === "function") {
+    mat.emissive.set(KAMIKO_AWAKE_NEON);
+    mat.emissiveIntensity = Math.max(mat.emissiveIntensity ?? 0, 1.5);
+    touched = true;
+  }
+  if (touched) mat.needsUpdate = true;
+  return touched;
 }
 
 function whitenHair(mat: LookMaterial, fallbackName: string): boolean {
