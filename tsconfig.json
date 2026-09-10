@@ -40,30 +40,27 @@
   /*
    * WHAT IS EXCLUDED HERE, AND WHY IT IS NOT SWEPT UNDER A RUG:
    *
-   * 1. Upstream airi's OWN test files (53 of them), written against `vitest` and, in one case,
-   *    `bun:test` — a Bun-only specifier that can never resolve under Next/webpack. Neither runner
-   *    is a dependency of this app. jest.config.mjs ignores the same paths.
+   * Upstream airi's OWN test files (53 of them), written against `vitest` and, in one case,
+   * `bun:test` — a Bun-only specifier that can never resolve under Next/webpack. Neither runner
+   * is a dependency of this app. jest.config.mjs ignores the same paths.
    *
-   * 2. `src/airi/plugin-protocol` — the one remaining merged-but-unwired airi package whose
-   *    mechanically repointed imports do not typecheck (commit d0be81f's repointing produced
-   *    subpaths appended onto files). It is kept because it is the VTuber-control contract the
-   *    registry's `plugin` listings are shaped for; wiring it in means deleting its line here and
-   *    fixing its imports, which is the honest cost of using it. The other broken quarantined
-   *    packages (core-agent, memory-pgvector, server-runtime, server-sdk, plugin-sdk,
-   *    plugin-sdk-tamagotchi, mediapipe, dualsense) were DELETED, not excluded — this repo ships
-   *    its own equivalents and the upstream reference still lives in apps/airi.
+   * The formerly-quarantined `src/airi/plugin-protocol` package (and the dead `ccc` /
+   * `server-shared` copies) were DELETED, not excluded — nothing in the product imported them, so
+   * keeping them only added confusion. The other broken quarantined packages (core-agent,
+   * memory-pgvector, server-runtime, server-sdk, plugin-sdk, plugin-sdk-tamagotchi, mediapipe,
+   * dualsense) were likewise deleted; the upstream reference still lives in apps/airi.
    *
-   *    NOT excluded, because they ARE wired into the product and DO typecheck:
-   *      - src/airi/motion  → the VRM idle animation (src/features/proceduralAnimation/statisticalIdle.ts)
-   *      - src/airi/lipsync → the viseme mouth (src/features/lipSync/lipSync.ts + visemes.ts)
-   *      - src/utils/airiQueue.ts (airi stream-kit) → the game's /wake send pipeline
+   * NOT excluded, because they ARE wired into the product and DO typecheck:
+   *   - src/airi/motion          → the VRM idle animation (src/features/proceduralAnimation/statisticalIdle.ts)
+   *   - src/airi/lipsync         → the viseme mouth (src/features/lipSync/lipSync.ts + visemes.ts)
+   *   - src/airi/pipelines-audio → streaming TTS (src/features/chat/streamingSpeech.ts)
+   *   - src/utils/airiQueue.ts (airi stream-kit) → the game's /wake send pipeline
    */
   "exclude": [
     "node_modules",
     "electron",
     "src/airi/**/*.test.ts",
     "src/airi/**/*.test.tsx",
-    "src/airi/**/*.spec.ts",
-    "src/airi/plugin-protocol"
+    "src/airi/**/*.spec.ts"
   ]
 }

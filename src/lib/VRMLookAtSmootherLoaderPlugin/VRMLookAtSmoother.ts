@@ -54,10 +54,39 @@ export class VRMLookAtSmoother extends VRMLookAt {
   /** firstPersonBoneの回転を一時的にしまっておくやつ */
   private _tempFirstPersonBoneQuat = new THREE.Quaternion();
 
+  /**
+   * カーソル追従に使うターゲット。`AutoLookAt` から登録される（無ければ遅延生成する）。
+   * `userTarget` としてこのオブジェクトのワールド座標を注視点に使う。
+   */
+  private _cursorTarget?: THREE.Object3D | null;
+
   public constructor(humanoid: VRMHumanoid, applier: VRMLookAtApplier) {
     super(humanoid, applier);
 
     this.enableSaccade = true;
+  }
+
+  /** カーソル追従用のターゲットオブジェクトを登録する */
+  public setCursorTarget(target: THREE.Object3D): void {
+    this._cursorTarget = target;
+  }
+
+  /**
+   * ワールド座標を指定して、そこ（＝ポインタ位置）を見るように `userTarget` を設定する。
+   * ターゲットが未登録なら安全に遅延生成する。呼び出し側のレンダーループで毎フレーム叩ける。
+   */
+  public lookAtWorldPosition(worldPos: THREE.Vector3): void {
+    if (!this._cursorTarget) {
+      this._cursorTarget = new THREE.Object3D();
+    }
+    this._cursorTarget.position.copy(worldPos);
+    this._cursorTarget.updateMatrixWorld();
+    this.userTarget = this._cursorTarget;
+  }
+
+  /** カーソル追従を解除し、アニメーション（カメラ目線）へフォールバックする */
+  public clearUserTarget(): void {
+    this.userTarget = null;
   }
 
   public update(delta: number): void {

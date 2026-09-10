@@ -20,7 +20,9 @@ export const defaults = {
   show_introduction: process.env.NEXT_PUBLIC_SHOW_INTRODUCTION ?? 'true',
   show_arbius_introduction: process.env.NEXT_PUBLIC_SHOW_ARBIUS_INTRODUCTION ?? 'false',
   show_add_to_homescreen: process.env.NEXT_PUBLIC_SHOW_ADD_TO_HOMESCREEN ?? 'true',
-  bg_color: process.env.NEXT_PUBLIC_BG_COLOR ?? '',
+  // Moody on-brand stage: BRAND ink. index.tsx applies bg_color when set (over the bg_url image), so
+  // she stands rim-lit against near-black — the neon-red eye + rim read as a hero shot, not a room.
+  bg_color: process.env.NEXT_PUBLIC_BG_COLOR ?? '#06060b',
   bg_url: process.env.NEXT_PUBLIC_BG_URL ?? '/bg/bg-room2.jpg',
   // Kamiko's canonical model path. `public/vrm/npc.vrm` is the character's model (a placeholder VRoid
   // sample today; drop the authored Kamiko VRM in at this path and it goes live with no config change).
@@ -32,9 +34,24 @@ export const defaults = {
   // to whatever VRM is loaded (features/vrmViewer/kamikoLook.ts) so even the placeholder reads as her.
   // 'false' disables it. A true one-asleep/one-glowing split needs the authored model.
   kamiko_heterochromia: process.env.NEXT_PUBLIC_KAMIKO_HETEROCHROMIA ?? 'true',
+  // When 'true' (default), Kamiko's eyes/head track the mouse pointer via the VRMLookAtSmoother
+  // userTarget (features/vrmViewer/viewer.ts). Falls back to the camera-facing gaze when the
+  // pointer is idle or absent (mobile/no-hover). Set to 'false' to keep only the camera gaze.
+  lookat_cursor: process.env.NEXT_PUBLIC_LOOKAT_CURSOR ?? 'true',
   youtube_videoid: '',
   animation_url: process.env.NEXT_PUBLIC_ANIMATION_URL ?? '/animations/idle_loop.vrma',
-  animation_procedural: process.env.NEXT_PUBLIC_ANIMATION_PROCEDURAL ?? 'false',
+  // AIRI statistical idle (features/proceduralAnimation/statisticalIdle.ts). Default 'true' so the
+  // never-exactly-repeating motion model drives the idle instead of the looping GIF-like VRMA clip.
+  // These two never double-drive the bones: viewer.ts only loads/plays the looping idle_loop.vrma
+  // when animation_procedural !== "true", so when this is on the mixer has no idle action and the
+  // procedural path is authoritative. It degrades safely — statisticalIdle falls back to the authored
+  // idle and never throws inside the render loop (see model.ts update()).
+  animation_procedural: process.env.NEXT_PUBLIC_ANIMATION_PROCEDURAL ?? 'true',
+  // Mobile 15MB-model relief: when 'true', loadVRM downscales every model texture to at most
+  // model_downscale_max px on its longest side (features/vrmViewer/model.ts → downscaleModelTextures).
+  // Default 'false' — it re-encodes textures at load, so it stays opt-in and off the proven path.
+  model_downscale_textures: process.env.NEXT_PUBLIC_MODEL_DOWNSCALE_TEXTURES ?? 'false',
+  model_downscale_max: process.env.NEXT_PUBLIC_MODEL_DOWNSCALE_MAX ?? '512',
   voice_url: process.env.NEXT_PUBLIC_VOICE_URL ?? '',
   chatbot_backend: process.env.NEXT_PUBLIC_CHATBOT_BACKEND ?? 'openai',
   arbius_llm_model_id: process.env.NEXT_PUBLIC_ARBIUS_LLM_MODEL_ID ?? 'default',

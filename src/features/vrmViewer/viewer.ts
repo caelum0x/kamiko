@@ -27,6 +27,7 @@ import { HTMLMesh } from "three/examples/jsm/interactive/HTMLMesh.js";
 
 import { loadVRMAnimation } from "@/lib/VRMAnimation/loadVRMAnimation";
 import { loadMixamoAnimation } from "@/lib/VRMAnimation/loadMixamoAnimation";
+import { VRMLookAtSmoother } from "@/lib/VRMLookAtSmootherLoaderPlugin/VRMLookAtSmoother";
 import { config } from "@/utils/config";
 
 import { XRControllerModelFactory } from "./XRControllerModelFactory";
@@ -186,6 +187,14 @@ export class Viewer {
 
   private mouse = new THREE.Vector2();
 
+  // Pointer-follow gaze (config: lookat_cursor). When the pointer has moved recently we aim
+  // the VRMLookAtSmoother userTarget at a world point under the cursor; otherwise we fall back
+  // to the camera-facing gaze. Reused scratch vectors avoid per-frame allocations.
+  private lastPointerMoveMs = 0;
+  private hasPointer = false;
+  private lookAtWorldPos = new THREE.Vector3();
+  private lookAtRayDir = new THREE.Vector3();
+
   // Temp Disable : WebXR
   // private particleRenderer = new BatchedParticleRenderer();
   // private particleCartoonStarField: THREE.Object3D | null = null;
@@ -286,6 +295,13 @@ export class Viewer {
     const ambientLight = new THREE.AmbientLight(0xffffff, 2);
     scene.add(ambientLight);
 
+    // Kamiko rim light: a neon-red back-light that catches her silhouette (hair, shoulders) so she
+    // reads as a lit hero shot rather than a flat product render. Behind + above, opposite the key.
+    const rimLight = new THREE.DirectionalLight(0xff2b4d, 1.1);
+    rimLight.position.set(-0.8, 1.4, -1.2).normalize();
+    rimLight.castShadow = false;
+    scene.add(rimLight);
+
     scene.add(this.roomBVHHelperGroup);
 
     // camera
@@ -317,6 +333,8 @@ export class Viewer {
     canvas.addEventListener("mousemove", (event) => {
       this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      this.lastPointerMoveMs = performance.now();
+      this.hasPointer = true;
     });
 
     // check if controller is available
@@ -1207,6 +1225,65 @@ export class Viewer {
     }
   }
 
+  /**
+   * Aim Kamiko's gaze (VRMLookAtSmoother userTarget) at a world point under the mouse pointer so
+   * her eyes/head track the cursor. Falls back to the camera-facing gaze when the pointer is idle
+   * or absent (mobile / no-hover), and when disabled via the `lookat_cursor` config flag.
+   *
+   * Must run BEFORE model.update() (which drives vrm.update -> lookAt.update) each frame.
+   * Defensive: never throws inside the render loop; no-ops if the smoother/head is unavailable.
+   */
+  private updateLookAtTarget() {
+    try {
+      if (config("lookat_cursor") === "false") return;
+
+      const vrm = this.model?.vrm;
+      if (!vrm) return;
+
+      // Only the smoother exposes the cursor API; plain VRMLookAt has no userTarget concept.
+      const lookAt = vrm.lookAt;
+      if (!(lookAt instanceof VRMLookAtSmoother)) return;
+
+      // Fall back to the camera gaze if the pointer hasn't moved recently (mobile/no-hover).
+      const POINTER_IDLE_TIMEOUT_MS = 2000;
+      const pointerActive =
+        this.hasPointer &&
+        this.camera != null &&
+        performance.now() - this.lastPointerMoveMs < POINTER_IDLE_TIMEOUT_MS;
+
+      if (!pointerActive || !this.camera) {
+        lookAt.clearUserTarget();
+        return;
+      }
+
+      // Use the head's distance from the camera as the gaze depth.
+      const head = vrm.humanoid?.getNormalizedBoneNode("head");
+      if (!head) {
+        lookAt.clearUserTarget();
+        return;
+      }
+      head.getWorldPosition(this.lookAtWorldPos);
+      const headDistance = this.lookAtWorldPos.distanceTo(this.camera.position);
+
+      // Project the cursor (NDC) into a ray from the camera and walk it out to head depth.
+      this.lookAtRayDir
+        .set(this.mouse.x, this.mouse.y, 0.5)
+        .unproject(this.camera)
+        .sub(this.camera.position)
+        .normalize();
+
+      this.lookAtWorldPos
+        .copy(this.lookAtRayDir)
+        .multiplyScalar(headDistance)
+        .add(this.camera.position);
+
+      lookAt.lookAtWorldPosition(this.lookAtWorldPos);
+    } catch (e) {
+      // Never break the render loop over gaze tracking.
+      console.error("updateLookAtTarget error", e);
+    }
+  }
+
   // thx @ke456-png :)
   public applyWind(dir: THREE.Vector3, strength: number) {
     this.model?.vrm?.springBoneManager?.joints.forEach((e) => {
@@ -1268,6 +1345,9 @@ export class Viewer {
     //   console.error("physics update error", e);
     // }
     // this.physicsMsPanel.update(performance.now() - ptime, 100);
+
+    // Aim the gaze at the cursor before the model (and thus vrm.lookAt) updates this frame.
+    this.updateLookAtTarget();
 
     ptime = performance.now();
     try {

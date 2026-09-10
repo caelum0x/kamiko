@@ -37,7 +37,30 @@ const config = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
+
 }
- 
+
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
-export default createJestConfig(config)
+const getConfig = createJestConfig(config)
+
+/*
+ * The AIRI streaming-speech pipeline (src/features/chat/streamingSpeech.ts) pulls in ESM-only
+ * packages — `@moeru/eventa`, `@moeru/std`, `clustr`, and their `nanoid/non-secure` dependency —
+ * that ship `"type": "module"` / `.mjs` with bare `import` syntax. Jest does not transform
+ * node_modules by default, so it tries to run those files as CommonJS and dies with
+ * "Cannot use import statement outside a module".
+ *
+ * next/jest force-prepends a blanket `/node_modules/` ignore pattern, and since a file is skipped
+ * when it matches ANY transformIgnorePattern, a plain negative-lookahead entry can never override
+ * it. So we resolve next/jest's config and replace transformIgnorePatterns wholesale: whitelist just
+ * these four packages for SWC transformation (everything else in node_modules stays ignored), and
+ * keep next's CSS-module ignore rule. This is Next.js's documented workaround for ESM deps.
+ */
+export default async () => {
+  const resolved = await getConfig()
+  resolved.transformIgnorePatterns = [
+    'node_modules/(?!(?:@moeru|clustr|nanoid)/)',
+    '^.+\\.module\\.(css|sass|scss)$',
+  ]
+  return resolved
+}

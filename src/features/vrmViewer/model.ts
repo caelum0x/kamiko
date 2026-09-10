@@ -183,7 +183,18 @@ export class Model {
           VRMUtils.removeUnnecessaryVertices(gltf.scene);
           VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
-          // await downscaleModelTextures(gltf, 128);
+          // Mobile 15MB-model relief: opt-in texture downscale (config flag, default off). Runs after
+          // the VRM is bound but before it enters the scene, so the render loop never sees the large
+          // textures. downscaleModelTextures re-encodes in place and resolves regardless of failures.
+          if (config("model_downscale_textures") === "true") {
+            const maxDim = parseInt(config("model_downscale_max"), 10);
+            const safeMaxDim = Number.isFinite(maxDim) && maxDim > 0 ? maxDim : 512;
+            try {
+              await downscaleModelTextures(gltf, safeMaxDim);
+            } catch (e) {
+              console.error("model_downscale_textures failed; using original textures", e);
+            }
+          }
 
           const mtoonDebugMode = config("mtoon_debug_mode");
           vrm.scene.traverse((obj: any) => {
@@ -456,6 +467,10 @@ export class Model {
     this.emoteController?.update(delta);
     this.mixer?.update(delta);
     this.vrm?.update(delta);
+    // AIRI statistical idle. When on (default), viewer.ts does NOT load/play the looping idle_loop.vrma,
+    // so mixer.update above drives no idle action and the procedural pass is authoritative over the
+    // bones — the two never double-drive. statisticalIdle.update never throws (falls back to the
+    // authored idle), so leaving it in the render loop is safe.
     if (config("animation_procedural") === "true") {
       this.proceduralAnimation?.update(delta);
     }
