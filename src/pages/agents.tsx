@@ -31,6 +31,19 @@ import {
   type AgentDetail, type AgentSummary, type AgentTrustView, type BadgeTone, type ListingSummary,
   type Mention, type ParsedMentions,
 } from '../npc/registry.ts';
+import {
+  LISTING_CURRENCIES,
+  LISTING_KINDS as PUBLISH_KINDS,
+  LISTING_LICENSES,
+  MAX_ARTIFACT_BYTES,
+  connectPublisher,
+  draftProblems,
+  publishListing,
+  type ListingCurrency,
+  type ListingDraft,
+  type ListingKind as PublishKind,
+  type ListingLicense,
+} from '../npc/publish.ts';
 import { NPC_CSS } from '../npc/styles.ts';
 
 /* ------------------------------------------------------------------ *
@@ -249,6 +262,7 @@ export default function AgentsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [det, setDet] = useState<DetailState | null>(null);
   const [showRegister, setShowRegister] = useState(false);
+  const [showPublish, setShowPublish] = useState(false);
   const backoffUntil = useRef(0);
   const loading = useRef(false);
 
@@ -347,6 +361,18 @@ export default function AgentsPage() {
               empty="no listings yet. prices here are recorded metadata only — this registry settles nothing.">
               {(l) => (
                 <>
+                  {/*
+                    Publishing lives INSIDE the marketplace section rather than beside the register
+                    button: it is the same surface a reader is already looking at, and "anyone can
+                    add to this" is a statement about this list.
+                  */}
+                  {showPublish
+                    ? <PublishPanel onPublished={load} onClose={() => setShowPublish(false)} />
+                    : (
+                      <button className="npca-register-btn" onClick={() => setShowPublish(true)}>
+                        + Publish a listing
+                      </button>
+                    )}
                   {l.listings.map((x) => <ListingRow key={x.id} x={x} />)}
                   <Dropped n={l.dropped} what="listing" />
                   {l.listings.length > 0 && (
@@ -446,23 +472,224 @@ function AgentRow({ a, onOpen }: { a: AgentSummary; onOpen: (t: string) => void 
   );
 }
 
+/**
+ * ListingRow — the summary, and the detail underneath it (NEXT-PHASES.md P1#5).
+ *
+ * The row used to be the whole listing: a title, a price and a truncated publisher key. That is
+ * enough to browse and not enough to DECIDE — the two things a person actually needs before
+ * downloading a stranger's file are the full publisher key (so they can compare it to whoever
+ * they think they are getting it from) and the artifact's sha256 (so they can check the bytes
+ * they got are the bytes that were listed).
+ *
+ * It expands in place rather than opening a route: the detail is four lines of fact, and a
+ * navigation would lose the reader's place in a list they are comparing across.
+ */
 function ListingRow({ x }: { x: ListingSummary }) {
+  const [open, setOpen] = useState(false);
   const artifact = listingArtifactUrl(REGISTRY, x.id);
   return (
     <div className="npca-listing">
-      <div className="npca-row-top">
-        <span className="npca-name">{x.title} <span className="npca-kind">[{x.kind}]</span></span>
-        <span className="npca-price">{x.priceLabel}</span>
-      </div>
-      {x.summary && <div className="npca-tagline">{x.summary}</div>}
+      <button
+        className="npca-listing-head"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="npca-row-top">
+          <span className="npca-name">{x.title} <span className="npca-kind">[{x.kind}]</span></span>
+          <span className="npca-price">{x.priceLabel}</span>
+        </div>
+        {x.summary && <div className="npca-tagline">{x.summary}</div>}
+        <div className="npca-meta">
+          by {shortKey(x.publisher)}{x.license ? ` · ${x.license}` : ''}
+          {typeof x.artifactBytes === 'number' ? ` · ${x.artifactBytes.toLocaleString('en-US')} bytes` : ''}
+          {' · '}<span className="npca-open">{open ? 'hide detail' : 'detail'}</span>
+        </div>
+      </button>
+
+      {open && (
+        <dl className="npca-detail">
+          <dt>publisher</dt>
+          {/* The FULL key, not the short form: the short form is for scanning a list, and this is
+              the value somebody compares against the account they think they are buying from. */}
+          <dd className="npca-mono">{x.publisher}</dd>
+
+          <dt>artifact sha256</dt>
+          <dd className="npca-mono">
+            {x.artifactSha256 ?? <span className="npca-err">not published for this listing</span>}
+          </dd>
+
+          <dt>licence</dt>
+          <dd>{x.license ?? 'not stated'}</dd>
+
+          <dt>size</dt>
+          <dd>{typeof x.artifactBytes === 'number' ? `${x.artifactBytes.toLocaleString('en-US')} bytes` : 'not stated'}</dd>
+
+          {x.created ? (
+            <>
+              <dt>listed</dt>
+              <dd>{new Date(x.created).toISOString().slice(0, 10)}</dd>
+            </>
+          ) : null}
+
+          <dt>id</dt>
+          <dd className="npca-mono">{x.id}</dd>
+        </dl>
+      )}
+
       <div className="npca-meta">
-        by {shortKey(x.publisher)}{x.license ? ` · ${x.license}` : ''}
-        {typeof x.artifactBytes === 'number' ? ` · ${x.artifactBytes.toLocaleString('en-US')} bytes` : ''}
-        {' · sha256-verified on every read'}
+        {/* Said next to the download, where it is actionable, rather than only in the section's
+            footnote: the hash above is what makes "verify it yourself" a real instruction. */}
+        The registry re-hashes these bytes and re-verifies the publisher signature on every read.
+        Check the download against the sha256 above yourself.
       </div>
       {artifact
         ? <a className="npca-link" href={artifact} target="_blank" rel="noopener noreferrer">download artifact ↗</a>
         : <span className="npca-err">no safe artifact link for this listing</span>}
+    </div>
+  );
+}
+
+/**
+ * PublishPanel — put something on the marketplace, signed with your own wallet.
+ *
+ * The registry has always accepted listings over a real public API; its only clients were a CLI
+ * and a curl command, so "anyone can publish" was a claim rather than something anybody could do
+ * (NEXT-PHASES.md P1#5).
+ *
+ * Everything checkable is checked BEFORE a wallet dialog opens — the vocabulary, the price, the
+ * file size — because the alternative is a person approving two signatures and then being told
+ * their title was empty. The two-signature flow is named in the copy for the same reason: an
+ * unannounced second dialog reads as something having gone wrong.
+ */
+function PublishPanel({ onPublished, onClose }: { onPublished: () => void; onClose: () => void }) {
+  const [draft, setDraft] = useState<ListingDraft>({
+    kind: 'character', title: '', summary: '', license: 'MIT', price: '0', currency: 'SOL',
+  });
+  const [publisher, setPublisher] = useState('');
+  const [file, setFile] = useState<{ name: string; bytes: Uint8Array } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState('');
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState('');
+
+  const set = (patch: Partial<ListingDraft>) => setDraft((d) => ({ ...d, ...patch }));
+
+  const pickFile = useCallback(async (f: File | null | undefined) => {
+    setErr('');
+    if (!f) { setFile(null); return; }
+    if (f.size > MAX_ARTIFACT_BYTES) {
+      // Refuse before reading it into memory. The ceiling exists on the server too, and reading a
+      // 200 MB file only to reject it is a tab that stops responding.
+      setFile(null);
+      setErr(`that file is ${f.size.toLocaleString('en-US')} bytes; the registry stores at most ${MAX_ARTIFACT_BYTES.toLocaleString('en-US')}.`);
+      return;
+    }
+    try {
+      setFile({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
+    } catch {
+      setErr('could not read that file.');
+    }
+  }, []);
+
+  const connect = useCallback(async () => {
+    setErr('');
+    const r = await connectPublisher();
+    if (!r.ok) { setErr(r.why); return; }
+    setPublisher(r.publisher);
+  }, []);
+
+  const problems = draftProblems(draft, file ? file.bytes.byteLength : null);
+
+  const submit = useCallback(async () => {
+    setErr(''); setDone('');
+    if (!file) { setErr('choose the file people are getting.'); return; }
+    setBusy(true);
+    try {
+      const r = await publishListing(draft, publisher, file.bytes, setStatus);
+      if (!r.ok) { setErr(r.why); return; }
+      setDone(r.note);
+      onPublished();
+    } finally {
+      setBusy(false);
+      setStatus('');
+    }
+  }, [draft, publisher, file, onPublished]);
+
+  return (
+    <div className="npcg-panel">
+      <div className="npca-row-top">
+        <h3>Publish a listing</h3>
+        <button className="npca-back" onClick={onClose} disabled={busy}>close</button>
+      </div>
+      <p className="npca-fineline">
+        Anyone can publish. Your wallet signs the listing, and that wallet is the only key that can
+        ever edit or delist it. The registry stores the file, re-hashes it on every read and
+        re-verifies your signature — it settles nothing, custodies nothing and charges nothing, so a
+        price here is recorded metadata, not an escrow. It takes <b>two signatures</b>: one to create
+        the listing privately, one to publish it.
+      </p>
+
+      <label className="npca-field">
+        <span>Kind</span>
+        <select className="npca-input" value={draft.kind} disabled={busy}
+          onChange={(e) => set({ kind: e.target.value as PublishKind })}>
+          {PUBLISH_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+        </select>
+      </label>
+      <label className="npca-field">
+        <span>Title</span>
+        <input className="npca-input" value={draft.title} disabled={busy} maxLength={120}
+          placeholder="what it is" onChange={(e) => set({ title: e.target.value })} />
+      </label>
+      <label className="npca-field">
+        <span>Summary</span>
+        <input className="npca-input" value={draft.summary} disabled={busy} maxLength={280}
+          placeholder="one line" onChange={(e) => set({ summary: e.target.value })} />
+      </label>
+      <label className="npca-field">
+        <span>Licence</span>
+        <select className="npca-input" value={draft.license} disabled={busy}
+          onChange={(e) => set({ license: e.target.value as ListingLicense })}>
+          {LISTING_LICENSES.map((l) => <option key={l} value={l}>{l}</option>)}
+        </select>
+      </label>
+      <label className="npca-field">
+        <span>Price — 0 is free</span>
+        <span className="npca-row2">
+          <input className="npca-input" value={draft.price} disabled={busy} inputMode="decimal"
+            onChange={(e) => set({ price: e.target.value })} />
+          <select className="npca-input npca-cur" value={draft.currency} disabled={busy}
+            onChange={(e) => set({ currency: e.target.value as ListingCurrency })}>
+            {LISTING_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </span>
+      </label>
+      <label className="npca-field">
+        <span>File — at most {MAX_ARTIFACT_BYTES.toLocaleString('en-US')} bytes</span>
+        <input className="npca-input" type="file" disabled={busy}
+          onChange={(e) => void pickFile(e.target.files?.[0])} />
+      </label>
+      {file && (
+        <div className="npca-meta">
+          {file.name} · {file.bytes.byteLength.toLocaleString('en-US')} bytes
+        </div>
+      )}
+
+      <button className="npca-register-btn" onClick={connect} disabled={busy}>
+        {publisher ? `publisher: ${shortKey(publisher)}` : 'Connect wallet'}
+      </button>
+
+      {/* Every problem, not just the first, so the form is fixed in one pass rather than three. */}
+      {!busy && publisher && problems.length > 0 ? (
+        <div className="npca-fineline">still to do: {problems.join(' ')}</div>
+      ) : null}
+      {err && <div className="npca-err">{err}</div>}
+      {busy && status && <div className="npcg-muted">{status}</div>}
+      {done && <div className="npca-done">{done}</div>}
+
+      <button className="npca-submit" onClick={submit} disabled={busy || !publisher || problems.length > 0}>
+        {busy ? 'working…' : 'Sign & publish'}
+      </button>
     </div>
   );
 }
@@ -673,6 +900,14 @@ const AGENTS_CSS = `
 .npca-retry{margin-top:8px;border:1px solid var(--line);background:none;color:var(--ink);border-radius:10px;padding:6px 12px;font:inherit;font-size:12px;cursor:pointer}
 .npca-grade{font-size:40px;font-weight:800;margin:4px 0}
 .npca-fineline{margin-top:10px;font-size:10px;line-height:1.6;color:var(--dim)}
+.npca-listing-head{display:block;width:100%;text-align:left;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer}
+.npca-detail{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin:8px 0 0;font-size:11px;line-height:1.5}
+.npca-detail dt{color:var(--dim);white-space:nowrap}
+.npca-detail dd{margin:0;color:var(--ink);word-break:break-all;overflow-wrap:anywhere}
+.npca-row2{display:flex;gap:6px}
+.npca-row2 .npca-input{flex:1}
+.npca-cur{flex:0 0 84px}
+.npca-done{margin-top:8px;font-size:12px;line-height:1.5;color:var(--neon)}
 .npca-register-btn{display:block;width:100%;margin-bottom:12px;border:1px solid var(--line);background:none;color:var(--neon);border-radius:10px;padding:10px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .npca-field{display:block;margin-top:10px;font-size:11px;color:var(--dim)}
 .npca-field>span{display:block;margin-bottom:4px}

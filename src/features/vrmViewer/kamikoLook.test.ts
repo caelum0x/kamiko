@@ -92,14 +92,42 @@ describe("applyKamikoLook", () => {
     const result = applyKamikoLook(vrm);
 
     expect(result.eyes).toBe(2);
-    // iris materials glow with the neon colour at full intensity
+    /*
+     * Iris materials take the neon colour and are LIT AT LEAST to the awake floor.
+     *
+     * This assertion said `toBe(1)` and had been failing since a3fc308 ("red iris — base colour,
+     * MToon emissive was invisible"), which deliberately raised the floor from 1.0 to 1.5 because
+     * the emissive barely showed over the brown iris texture. The code was the fix and the test
+     * was the thing that did not get updated. CI *does* gate this suite (the `front-end` job runs
+     * `jest --ci`), so this was not an ungated corner — it means the failure was shipped to `main`
+     * red and left there. The README's claim that jest "is not gated" was the stale half, and it is
+     * the reason nobody went looking; it has been corrected.
+     *
+     * It is written as a FLOOR rather than an equality because that is what the code does
+     * (`Math.max(existing ?? 0, …)`), which makes this the stronger statement of the two: a
+     * material that already glowed brighter must not be DIMMED to hit a number.
+     */
     expect(iris1.emissive?._v).toBe(KAMIKO_AWAKE_NEON);
-    expect(iris1.emissiveIntensity).toBe(1);
+    expect(iris1.emissiveIntensity).toBeGreaterThanOrEqual(1.5);
     expect(iris1.needsUpdate).toBe(true);
     expect(iris2.emissive?._v).toBe(KAMIKO_AWAKE_NEON);
     // sclera / face are untouched
     expect(white.emissive?._v).toBeUndefined();
     expect(face.emissive?._v).toBeUndefined();
+  });
+
+  it("raises a dim iris to the awake floor and never dims a brighter one", () => {
+    // The regression a bare equality assertion invites: somebody "simplifies" Math.max to an
+    // assignment, every VRM whose iris already glows gets turned DOWN, and the test still passes.
+    const dim = eyeMat("EyeIris_dim");
+    dim.emissiveIntensity = 0.2;
+    const bright = eyeMat("EyeIris_bright");
+    bright.emissiveIntensity = 4;
+
+    applyKamikoLook(fakeVrm([{ name: "m0", material: dim }, { name: "m1", material: bright }]));
+
+    expect(dim.emissiveIntensity).toBeGreaterThanOrEqual(1.5);
+    expect(bright.emissiveIntensity).toBe(4);
   });
 
   it("excludes the white, shine, lash and brow even when the name is iris-ish", () => {

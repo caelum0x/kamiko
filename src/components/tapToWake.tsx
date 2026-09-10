@@ -53,20 +53,39 @@ interface MarketResp {
 }
 
 /** PURE. Format a USD price, with more decimals for sub-dollar meme prices. `—` when absent. */
-function fmtUsd(n: number | null | undefined): string {
+export function fmtUsd(n: number | null | undefined): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
   const digits = Math.abs(n) < 1 ? 6 : 2;
   return '$' + n.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 /** PURE. Signed 24h percent, or '' when there is no number to sign. */
-function fmtPct(n: number | null | undefined): string {
+export function fmtPct(n: number | null | undefined): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return '';
   return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
 }
 /** PURE. Green up, red down, dim when unknown — no emoji, just colour. */
-function pctClass(n: number | null | undefined): string {
+export function pctClass(n: number | null | undefined): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return 'opacity-60';
   return n >= 0 ? 'text-emerald-400' : 'text-rose-400';
+}
+
+/**
+ * PURE. Bonding-curve graduation, 0–100, or null when there is nothing honest to show.
+ *
+ * Extracted out of the JSX so it can be tested: this is a percentage rendered next to a token's
+ * name, and the failure modes are all silent ones. `finishingRate` is Raydium LaunchLab's 0→1
+ * reading of how close $KAMIKO is to graduating off the curve, and it arrives over the network —
+ * so it can be absent, null, a string, NaN, or out of range, and every one of those must become
+ * "say nothing" or a clamped number rather than `NaN%` or a bar past its own track.
+ *
+ * It is null unless the token is LIVE: before launch there is no curve, and a graduation reading
+ * for a token that does not exist is the kind of number somebody screenshots.
+ */
+export function graduationPercent(tape: { live?: boolean; finishingRate?: unknown } | null | undefined): number | null {
+  if (!tape?.live) return null;
+  const raw = tape.finishingRate;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return null;
+  return Math.round(Math.min(1, Math.max(0, raw)) * 100);
 }
 
 export interface MarketHudProps {
@@ -115,12 +134,7 @@ export function MarketHud({ openLink }: MarketHudProps) {
   if (!quote && !tape) return null;
 
   const kamikoLive = !!tape?.live;
-  // Bonding-curve graduation progress, only when live and a real 0→1 reading landed. Clamped so a
-  // stray out-of-range value can never blow past the bar or read as a nonsense percentage.
-  const gradPct =
-    kamikoLive && typeof tape?.finishingRate === 'number' && Number.isFinite(tape.finishingRate)
-      ? Math.round(Math.min(1, Math.max(0, tape.finishingRate)) * 100)
-      : null;
+  const gradPct = graduationPercent(tape);
 
   return (
     <div className="pointer-events-auto fixed right-2 top-2 z-20 flex max-w-[52vw] flex-col items-end gap-0.5 rounded-xl bg-black/70 px-3 py-2 text-white backdrop-blur-sm sm:max-w-none">

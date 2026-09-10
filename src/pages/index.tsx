@@ -54,6 +54,7 @@ import { AlertContext } from "@/features/alert/alertContext";
 
 import { config, updateConfig } from '@/utils/config';
 import { isTauri } from '@/utils/isTauri';
+import { readDevMode } from '@/utils/devMode';
 import { langs } from '@/i18n/langs';
 import { VrmStoreProvider } from "@/features/vrmStore/vrmStoreContext";
 import { AmicaLifeContext } from "@/features/amicaLife/amicaLifeContext";
@@ -187,6 +188,17 @@ export default function Home() {
   // showContent exists to allow ssr
   // otherwise issues from usage of localStorage and window will occur
   const [showContent, setShowContent] = useState(false);
+  /*
+   * THE DEVELOPER TOOLS ARE OPT-IN (NEXT-PHASES.md P1#4).
+   *
+   * `/share` is amica's character creator and `/import` loads somebody else's character file —
+   * both wonderful tools, and both an invitation to REPLACE Kamiko with a VRM of your own, one
+   * click from the front of the shop. Nothing is deleted (the owner's instruction was "develop,
+   * don't trim"): the routes still work for anyone who types them, and `?dev=1` puts the buttons
+   * back. Read after mount for the same reason showContent exists — it depends on `window`, and a
+   * server render that guessed would flicker a developer's menu at every visitor.
+   */
+  const [devMode, setDevMode] = useState(false);
 
   const [showArbiusIntroduction, setShowArbiusIntroduction] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -296,6 +308,7 @@ export default function Home() {
 
   // this exists to prevent build errors with ssr
   useEffect(() => setShowContent(true), []);
+  useEffect(() => setDevMode(readDevMode()), []);
   if (!showContent) return <></>;
 
   return (
@@ -402,19 +415,28 @@ export default function Home() {
               />
             )}
 
-            <MenuButton
-              large={isVRHeadset}
-              icon={ShareIcon}
-              href="/share"
-              target={isTauri() ? '' : '_blank'}
-              label="share"
-            />
-            <MenuButton
-              large={isVRHeadset}
-              icon={CloudArrowDownIcon}
-              href="/import"
-              label="import"
-            />
+            {/*
+              Creator tools, behind ?dev=1. See the devMode comment above for why these two in
+              particular: they are the doors that swap the character out, and this stage is one
+              character's. Both routes remain reachable by URL for anyone who wants them.
+            */}
+            {devMode && (
+              <>
+                <MenuButton
+                  large={isVRHeadset}
+                  icon={ShareIcon}
+                  href="/share"
+                  target={isTauri() ? '' : '_blank'}
+                  label="character creator (dev)"
+                />
+                <MenuButton
+                  large={isVRHeadset}
+                  icon={CloudArrowDownIcon}
+                  href="/import"
+                  label="import a character (dev)"
+                />
+              </>
+            )}
 
             {/*
               THE $NPC FUNNEL, REACHABLE FROM THE FRONT DOOR.
