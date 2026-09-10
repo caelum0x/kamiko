@@ -65,6 +65,20 @@ export function createStreamingSpeech(deps: StreamingSpeechDeps): StreamingSpeec
       deps.onSpeakStart?.();
       try {
         await deps.speak(item.audio, sp);
+      } catch (e) {
+        /*
+         * ONE SENTENCE FAILING TO PLAY MUST NOT END THE TURN.
+         *
+         * This path is now the DEFAULT speech path, not an opt-in experiment, and the playback
+         * manager plays in strict order — so a rejection here does not lose one line, it stalls
+         * every line queued behind it and she goes silent mid-answer with no error anyone sees.
+         * `model.speak` reaches into the VRM's audio graph and the browser's autoplay policy;
+         * both throw for reasons that have nothing to do with the next sentence.
+         *
+         * The text was already bubbled above, so a failure degrades to "she typed it but did not
+         * say it" — which is the same shape amica's non-streaming path degrades to when TTS is off.
+         */
+        console.warn('[streamingSpeech] a sentence could not be spoken; continuing the turn', e);
       } finally {
         deps.onSpeakEnd?.();
       }
@@ -78,7 +92,21 @@ export function createStreamingSpeech(deps: StreamingSpeechDeps): StreamingSpeec
       if (!request.text) return null;
       const [sp] = textsToScreenplay([request.text]);
       if (!sp) return null;
-      return deps.fetchAudio(sp.talk);
+      try {
+        return await deps.fetchAudio(sp.talk);
+      } catch (e) {
+        /*
+         * A TTS FAILURE IS A SILENT SENTENCE, NEVER A BROKEN TURN.
+         *
+         * `Chat.fetchAudio` catches its own backend errors and returns null, but it is not the
+         * only thing that can reject here: an aborted fetch, a proxy that closes the connection,
+         * an RVC pass that throws. `null` is the pipeline's documented "nothing to play", and the
+         * playback manager skips it — so the rest of the answer still gets spoken instead of the
+         * whole turn dying on one bad sentence.
+         */
+        console.warn('[streamingSpeech] TTS failed for a sentence; it will not be spoken', e);
+        return null;
+      }
     },
   });
 

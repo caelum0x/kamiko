@@ -74,7 +74,24 @@ export const defaults = {
   // Opt-in AIRI streaming-TTS pipeline (features/chat/streamingSpeech.ts): concurrent per-sentence
   // TTS generation with strictly-ordered playback + barge-in, vs the default serial ttsJobs path.
   // 'false' keeps the proven amica path. Reuses amica's sentence-split + [emotion] parsing.
-  tts_streaming: process.env.NEXT_PUBLIC_TTS_STREAMING ?? 'false',
+  /*
+   * STREAMING TTS IS THE LIVE PATH NOW (NEXT-PHASES.md P3#9), not an opt-in experiment.
+   *
+   * amica's original path generates and speaks one sentence at a time: sentence N+1's audio is not
+   * even requested until N has finished playing, so the silence between her sentences is a full TTS
+   * round-trip, every time. The ported AIRI pipeline generates up to four at once and plays them in
+   * strict order, which turns that gap into the latency of ONE sentence rather than the sum — on a
+   * live stream that is the difference between a conversation and a walkie-talkie.
+   *
+   * It was shipped `false` because it was new. It has since been given the two things that made
+   * flipping it safe: both host callbacks fail SAFE (a TTS error is a silent sentence, a playback
+   * error is a skipped one — neither stalls the ordered queue behind it), and barge-in is wired to
+   * chat.interrupt(), so a new turn cancels the previous turn's queued and playing audio instead of
+   * talking over her.
+   *
+   * NEXT_PUBLIC_TTS_STREAMING=false is the way back to the serial queue if a deployment needs it.
+   */
+  tts_streaming: process.env.NEXT_PUBLIC_TTS_STREAMING ?? 'true',
   stt_backend: process.env.NEXT_PUBLIC_STT_BACKEND ?? 'whisper_browser',
   // Default to the secure bridge vision path (server-side Anthropic key). vision_bridge_url is the
   // bridge's /v1/vision, derived from the same NPC_API origin the chat uses.
