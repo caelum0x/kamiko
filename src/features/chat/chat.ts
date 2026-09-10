@@ -37,6 +37,7 @@ import { AmicaLife } from "@/features/amicaLife/amicaLife";
 
 import { config, updateConfig } from "@/utils/config";
 import { cleanTalk } from "@/utils/cleanTalk";
+import { createStreamingSpeech, type StreamingSpeech } from "./streamingSpeech";
 import { processResponse } from "@/utils/processResponse";
 import { wait } from "@/utils/wait";
 import isDev from '@/utils/isDev';
@@ -96,6 +97,10 @@ export class Chat {
 
   public currentStreamIdx: number;
 
+  // AIRI streaming-TTS adapter, built at initialize() when the viewer exists. Only used when
+  // config('tts_streaming')==='true'; otherwise the ttsJobs/speakJobs path below runs unchanged.
+  private streamingSpeech?: StreamingSpeech;
+
   private eventSource: EventSource | null = null
 
   constructor() {
@@ -141,6 +146,18 @@ export class Chat {
     this.setThoughtMessage = setThoughtMessage;
     this.setChatProcessing = setChatProcessing;
     this.setChatSpeaking = setChatSpeaking;
+
+    // The opt-in AIRI streaming-TTS pipeline. Built here because it needs the viewer's model.speak
+    // and this Chat's fetchAudio; it stays idle unless config('tts_streaming') is on.
+    this.streamingSpeech = createStreamingSpeech({
+      fetchAudio: (talk) => this.fetchAudio(talk),
+      speak: async (audio, screenplay) => {
+        await this.viewer?.model?.speak(audio, screenplay);
+      },
+      bubble: (text) => this.bubbleMessage("assistant", text),
+      onSpeakStart: () => this.setChatSpeaking?.(true),
+      onSpeakEnd: () => this.setChatSpeaking?.(false),
+    });
 
     // these will run forever
     this.processTtsJobs();
@@ -369,6 +386,8 @@ export class Chat {
     // TODO if llm type is llama.cpp, we can send /stop message here
     this.ttsJobs.clear();
     this.speakJobs.clear();
+    // Barge-in for the streaming path: cancel queued + playing pipeline audio too.
+    this.streamingSpeech?.interrupt();
     // TODO stop viewer from speaking
   }
 
@@ -547,6 +566,10 @@ export class Chat {
     console.time("chat stream processing");
     let reader = this.streams[this.streams.length - 1].getReader();
     this.readers.push(reader);
+    // Opt-in: route already-parsed sentences through AIRI's streaming pipeline (concurrent TTS +
+    // ordered playback + barge-in) instead of the serial ttsJobs queue. Same parsing either way.
+    const useStreaming = config("tts_streaming") === "true" && !!this.streamingSpeech;
+    const turn = useStreaming ? this.streamingSpeech!.openTurn() : null;
     let sentences = new Array<string>();
 
     let aiTextLog = "";
@@ -591,11 +614,15 @@ export class Chat {
             }
 
             if (!isThinking) {
-              this.ttsJobs.enqueue({
-                screenplay: aiTalks[0],
-                streamIdx: streamIdx,
-              });
-            } 
+              if (turn) {
+                turn.feed(aiTalks[0]);
+              } else {
+                this.ttsJobs.enqueue({
+                  screenplay: aiTalks[0],
+                  streamIdx: streamIdx,
+                });
+              }
+            }
 
             // thought bubble
             this.thoughtBubbleMessage(isThinking, aiTalks[0].text);
@@ -624,6 +651,8 @@ export class Chat {
       this.bubbleMessage!("assistant", errMsg);
       console.error(errMsg);
     } finally {
+      // Flush the last sentence into the pipeline; playback drains on its own after this returns.
+      turn?.end();
       if (!reader.closed) {
         reader.releaseLock();
       }
