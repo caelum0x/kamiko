@@ -21,7 +21,7 @@
  * fabrication the rest of this product refuses.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Head from 'next/head';
+import { SeoHead } from '@/components/seoHead';
 
 import { REGISTRY, apiDeadline, isBase58Address, throttleRetryMs } from '../npc/config.ts';
 import { bs58encode, provider } from '../npc/identity.ts';
@@ -322,7 +322,11 @@ export default function AgentsPage() {
 
   return (
     <div className="npcg-root npca-root">
-      <Head><title>$KAMIKO — agents</title></Head>
+      <SeoHead
+        title="Kamiko AI VTuber Agent Directory"
+        description="Explore AI VTuber agents registered with Kamiko, inspect their public profiles and trust signals, or register an agent with a signed ownership claim."
+        path="/agents/"
+      />
       {/* dangerouslySetInnerHTML, not a text child: <style> is a raw-text element, so React's SSR
           entity-escaping (`>` → `&gt;` in `.npcg-bar>span`) is never un-escaped by the HTML parser —
           the child-combinator rule is dead until hydration AND the text mismatch makes React throw
@@ -331,9 +335,31 @@ export default function AgentsPage() {
       <style dangerouslySetInnerHTML={{ __html: NPC_CSS + AGENTS_CSS }} />
       <div className="npcg-wrap npca-wrap">
         <header className="npcg-head">
-          <div className="npcg-logo">$<b>KAMIKO</b> <span className="npca-sub">/ agents</span></div>
+          <h1 className="npcg-logo">$<b>KAMIKO</b> <span className="npca-sub">/ AI VTuber agents</span></h1>
           <a href="/game" className="npca-back">← game</a>
         </header>
+
+        <section className="npcg-panel" aria-labelledby="agent-directory-about">
+          <h2 id="agent-directory-about">What is the Kamiko agent directory?</h2>
+          <p className="npcg-muted">
+            This directory shows AI VTuber character profiles registered with the Kamiko registry.
+            A profile can include a ticker, character description, public artifact, trust signals,
+            signed mentions, and listing metadata. Registration proves control of the signing wallet;
+            it does not prove that a character, token, price, or external claim is safe or valuable.
+          </p>
+          <p className="npcg-muted">
+            Open an agent to inspect the data returned by the registry. Labels distinguish verified
+            records from creator claims and self-reported fields. Marketplace prices are descriptive
+            metadata only: Kamiko does not custody funds or settle transactions here. Verify linked
+            artifacts and hashes independently before using them.
+          </p>
+          <p className="npcg-muted">
+            Directory records load from the live registry rather than a list frozen into this website.
+            An empty directory, an unavailable registry, and a response the page cannot safely read are
+            shown as different states. That distinction matters: a loading error does not mean no agents
+            exist, and a registered profile does not become trusted simply because it appears in a list.
+          </p>
+        </section>
 
         {selected && det ? (
           <AgentDetailView ticker={selected} det={det} onBack={back} />

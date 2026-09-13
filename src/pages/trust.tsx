@@ -13,7 +13,7 @@
  * compromised API can never become a link.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Head from 'next/head';
+import { SeoHead } from '@/components/seoHead';
 
 import { API, apiDeadline, throttleRetryMs } from '../npc/config.ts';
 
@@ -125,15 +125,30 @@ export default function TrustPage() {
 
   return (
     <div className="npct-root">
-      <Head><title>$KAMIKO — trust</title></Head>
+      <SeoHead
+        title="Verify Kamiko — Project Trust and Token Checks"
+        description="Review Kamiko's live project checks, verification status, token signals, and clear warnings before trusting any claimed mint or market data."
+        path="/trust/"
+      />
       {/* raw-text element — see agents.tsx: a text child is SSR entity-escaped (`>` → `&gt;`) and
           never un-escaped, breaking child-combinator rules pre-hydration and mismatching hydration. */}
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="npct-wrap">
         <header className="npct-head">
-          <div className="npct-logo">$<b>KAMIKO</b> <span>/ trust</span></div>
+          <h1 className="npct-logo">Verify $<b>KAMIKO</b> <span>/ trust and token checks</span></h1>
           <a href="/game" className="npct-back">← game</a>
         </header>
+
+        <section className="npct-card" aria-labelledby="trust-page-about">
+          <h2 id="trust-page-about">What this page verifies</h2>
+          <div className="npct-dim">
+            This page reports the project and token checks the live verifier could complete. Each signal
+            keeps its own pass, warning, failure, or unknown state; missing data is not converted into a
+            clean result. Use the direct evidence link when one is available, confirm any published mint
+            on a block explorer, and check the report time before relying on changing market or holder
+            data. This is a verification report, not a financial audit or a promise that a token is safe.
+          </div>
+        </section>
 
         {throttleNote ? <div className="npct-throttle">{throttleNote}</div> : null}
 

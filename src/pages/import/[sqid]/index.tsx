@@ -8,6 +8,7 @@ import VrmDemo from "@/components/vrmDemo";
 import { getSupabase } from '@/utils/supabase';
 import { vrmDataProvider } from '@/features/vrmStore/vrmDataProvider';
 import { BlobToBase64 } from '@/utils/blobDataUtils';
+import { SeoHead } from '@/components/seoHead';
 
 export default function Import() {
   const { t } = useTranslation();
@@ -146,6 +147,12 @@ export default function Import() {
 
   return (
     <div className="p-4 md:p-20">
+      <SeoHead
+        title="Shared Kamiko Character"
+        description="Open a shared Kamiko character configuration. This utility page is excluded from search results."
+        path="/import/"
+        noindex
+      />
       <div className="sm:col-span-3 max-w-md rounded-xl mt-4">
         {error && (
           <div>

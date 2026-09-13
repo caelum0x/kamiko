@@ -41,7 +41,7 @@ export const NPC_CSS = `
 .npcg-notice.unsafe{border-color:var(--bad);color:var(--bad)}.npcg-notice.caution{border-color:var(--warn);color:var(--warn)}
 .npcg-btn{margin-top:12px;width:100%;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:12px;padding:12px;font:inherit;font-weight:700;cursor:pointer}
 .npcg-panel{margin-top:20px;border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:12px}
-.npcg-panel h3{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--dim);margin:0 0 8px}
+.npcg-panel h2,.npcg-panel h3{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--dim);margin:0 0 8px}
 .npcg-lb{display:flex;justify-content:space-between;border-bottom:1px dashed var(--line);padding:8px 0;font-size:13px}
 .npcg-rank{color:var(--dim);margin-right:8px}.neon{color:var(--neon)}
 .npcg-muted{font-size:12px;color:var(--dim)}.npcg-center{text-align:center;min-height:14px;margin-top:4px}

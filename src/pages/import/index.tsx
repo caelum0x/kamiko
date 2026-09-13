@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '@/components/iconButton';
+import { SeoHead } from '@/components/seoHead';
 import { useRouter } from 'next/router';
 
 export default function Import() {
@@ -16,6 +17,12 @@ export default function Import() {
 
   return (
     <div className="fixed w-full h-full top-0 left-0 backdrop-blur-sm bg-gray-900 bg-opacity-50 z-50 flex">
+      <SeoHead
+        title="Import a Kamiko Character"
+        description="Import a shared Kamiko character configuration by entering its code. This utility page is excluded from search results."
+        path="/import/"
+        noindex
+      />
       <div className="p-20 md:p-25">
         <div className="fixed top-0 left-0 w-full max-h-full text-black text-xs text-left z-20">
           <div className="p-2 bg-white">

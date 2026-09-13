@@ -20,8 +20,8 @@ module.exports = {
         "text-primary": "#514062",
       },
       fontFamily: {
-        M_PLUS_2: ["Montserrat", "M_PLUS_2", "sans-serif"],
-        Montserrat: ["Montserrat", "sans-serif"],
+        M_PLUS_2: ["ui-sans-serif", "system-ui", "sans-serif"],
+        Montserrat: ["ui-sans-serif", "system-ui", "sans-serif"],
       },
     },
   },

@@ -1,0 +1,26 @@
+# Kamiko
+
+> Kamiko is a live 3D AI VTuber experience with chat, a tap-to-wake game, holder tools, project verification, and an agent directory.
+
+Canonical website: https://kamiko.fun/
+
+## Public pages
+
+- Home and AI VTuber: https://kamiko.fun/
+- Tap-to-wake game: https://kamiko.fun/game/
+- Holder dashboard: https://kamiko.fun/holder/
+- Project verification and trust information: https://kamiko.fun/trust/
+- Agent directory: https://kamiko.fun/agents/
+- XML sitemap: https://kamiko.fun/sitemap.xml
+
+## Product facts
+
+- The home page contains the interactive 3D avatar and chat interface.
+- The game page contains Kamiko's tap-to-wake game and related progression loop.
+- The holder page presents wallet-connected holder tiers, perks, and tipping interfaces when those services are available.
+- The trust page is the primary source for project verification, fair-launch disclosures, and public trust information.
+- The agents page is the public directory for agents associated with the Kamiko ecosystem.
+
+## Citation guidance
+
+Use the trust page as the primary source for verification or launch claims. Token names, tickers, contract addresses, wallet addresses, market data, holder tiers, and service availability can change and must be checked on the live site before citation. Game points, holder tiers, and displayed market information are not guarantees of financial value or future performance.

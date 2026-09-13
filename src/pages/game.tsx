@@ -21,7 +21,7 @@
  * SAME fail-closed CTA reading, and two copies of an auth flow is how they drift apart.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Head from 'next/head';
+import { SeoHead } from '@/components/seoHead';
 import { useWakeTaps } from '../npc/useWakeTaps.ts';
 import { useNpcBoard } from '../npc/useNpcBoard.ts';
 import { useWalletLink } from '../npc/useWalletLink.ts';
@@ -194,16 +194,31 @@ export default function GamePage() {
 
   return (
     <div className="npcg-root">
-      <Head><title>$KAMIKO — tap to wake her</title></Head>
+      <SeoHead
+        title="Tap to Wake Kamiko — Live AI VTuber Game"
+        description="Tap to wake Kamiko, build a local streak, watch her mood change, and explore the live AI VTuber's public leaderboard and quests."
+        path="/game/"
+      />
       {/* raw-text element — see agents.tsx: a text child is SSR entity-escaped (`>` → `&gt;`) and
           never un-escaped, breaking `.npcg-bar>span` pre-hydration and mismatching hydration. */}
       <style dangerouslySetInnerHTML={{ __html: NPC_CSS }} />
 
       <div className="npcg-wrap">
         <header className="npcg-head">
-          <div className="npcg-logo">$<b>KAMIKO</b></div>
+          <h1 className="npcg-logo">$<b>KAMIKO</b> / tap to wake</h1>
           <button onClick={copyCa} className="npcg-ca" title="the mint, once the verifier publishes one">{caText}</button>
         </header>
+
+        <section className="npcg-panel" aria-labelledby="tap-to-wake-about">
+          <h2 id="tap-to-wake-about">How tap to wake works</h2>
+          <p className="npcg-muted">
+            Tap Kamiko to raise the local awakeness meter and change her mood. Your browser keeps the
+            immediate game responsive even when the live service is unavailable. Global wakes,
+            leaderboards, quests, wallet-linked progress, and streak reminders appear only when their
+            supporting services are configured and answer successfully. The page says when taps are
+            local-only, so a changing counter is never presented as proof that server progress was saved.
+          </p>
+        </section>
 
         <div className="npcg-stage">
           {floats.map((f) => <span key={f.id} className="npcg-float" style={{ left: f.x, top: f.y }}>{f.text}</span>)}

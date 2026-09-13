@@ -8,8 +8,6 @@ import {
 } from "react";
 import { useRouter } from "next/router";
 import { Menu, Transition } from '@headlessui/react'
-import { clsx } from "clsx";
-import { M_PLUS_2, Montserrat } from "next/font/google";
 import { useTranslation, Trans } from 'react-i18next';
 import {
   ChatBubbleLeftIcon,
@@ -72,23 +70,101 @@ import { langs } from '@/i18n/langs';
 import { VrmStoreProvider } from "@/features/vrmStore/vrmStoreContext";
 import { AmicaLifeContext } from "@/features/amicaLife/amicaLifeContext";
 import { ChatModeText } from "@/components/chatModeText";
+import { SeoHead } from "@/components/seoHead";
 
 import { TimestampedPrompt } from "@/features/amicaLife/eventHandler";
 import { handleChatLogs } from "@/features/externalAPI/externalAPI";
 import { VerticalSwitchBox } from "@/components/switchBox";
 import { ThoughtText } from "@/components/thoughtText";
 
-const m_plus_2 = M_PLUS_2({
-  variable: "--font-m-plus-2",
-  display: "swap",
-  preload: false,
-});
+const PAGE_TITLE = "$KAMIKO — Live AI VTuber and Tap-to-Wake Game";
+const PAGE_DESCRIPTION =
+  "Meet Kamiko, a live 3D AI VTuber who reacts to chat and market signals. Play the tap-to-wake game, view holder perks, and verify the project.";
 
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  display: "swap",
-  subsets: ["latin"],
-});
+const HOME_FAQ = [
+  {
+    question: 'What is Kamiko?',
+    answer: 'Kamiko is an interactive 3D AI VTuber experience with chat, a tap-to-wake game, public project checks, and an AI agent directory.',
+  },
+  {
+    question: 'Do I need a wallet to use Kamiko?',
+    answer: 'No. You can open the 3D experience and play the local tap-to-wake loop without a wallet. A wallet is only needed for holder-specific features.',
+  },
+  {
+    question: 'Where can I verify Kamiko token claims?',
+    answer: 'Use the project trust page for the current verification status, warnings, and any officially published mint information. Treat claims elsewhere as unverified.',
+  },
+] as const;
+
+function PageHead() {
+  return (
+    <SeoHead
+      title={PAGE_TITLE}
+      description={PAGE_DESCRIPTION}
+      path="/"
+      websiteSchema
+      faq={HOME_FAQ}
+    />
+  );
+}
+
+function HomeAbout({ loading = false }: { loading?: boolean }) {
+  return (
+    <section
+      aria-labelledby="kamiko-heading"
+      className={loading
+        ? 'mx-auto w-full max-w-2xl rounded-2xl border border-slate-700 bg-slate-900 p-6'
+        : 'fixed bottom-24 right-3 z-10 w-[min(22rem,calc(100vw-1.5rem))] rounded-xl border border-slate-700 bg-slate-950/90 p-3 text-white shadow-xl backdrop-blur-md'}
+    >
+      <h1 id="kamiko-heading" className={loading ? 'text-4xl font-bold' : 'text-sm font-bold'}>
+        Kamiko, the live AI VTuber
+      </h1>
+      <details className="mt-2 text-sm text-slate-300" open={loading}>
+        <summary className="cursor-pointer font-medium text-emerald-300">
+          What you can do here
+        </summary>
+        <div className="mt-3 max-h-[55vh] space-y-3 overflow-auto pr-1 leading-6">
+          <p>
+            Kamiko is an interactive 3D AI VTuber experience. The home screen combines a live avatar,
+            chat controls, voice, and a tap-to-wake panel in one browser-based stage. Open the tools
+            menu to change the experience, inspect chat history, or launch one of the public Kamiko
+            features.
+          </p>
+          <p>
+            The <a href="/game" className="underline">tap-to-wake game</a> tracks taps on your device,
+            changes Kamiko&apos;s mood, and shows public quests or leaderboard data when the live service is
+            configured. The <a href="/agents" className="underline">AI agent directory</a> lists registered
+            character profiles and labels self-reported or unverified claims instead of treating them as
+            endorsements.
+          </p>
+          <p>
+            Before relying on a token name, mint, market link, or holder claim, open the
+            {' '}<a href="/trust" className="underline">project trust page</a>. It reports what could be
+            checked, what remains unknown, and when the result was produced. Wallet-connected tiers,
+            perks, topic suggestions, and tipping live in the
+            {' '}<a href="/holder" className="underline">holder dashboard</a>; that utility is separate
+            from the public game and is not required to explore Kamiko.
+          </p>
+          <div aria-labelledby="kamiko-faq-heading">
+            <h2 id="kamiko-faq-heading" className="font-semibold text-white">Kamiko FAQ</h2>
+            {HOME_FAQ.map(({ question, answer }) => (
+              <div key={question} className="mt-2">
+                <h3 className="font-medium text-white">{question}</h3>
+                <p>{answer}</p>
+              </div>
+            ))}
+          </div>
+          <nav aria-label="Explore Kamiko" className="flex flex-wrap gap-x-4 gap-y-2 text-emerald-300">
+            <a href="/game" className="underline">Play the game</a>
+            <a href="/trust" className="underline">Verify the project</a>
+            <a href="/agents" className="underline">Explore agents</a>
+            <a href="/holder" className="underline">Holder tools</a>
+          </nav>
+        </div>
+      </details>
+    </section>
+  );
+}
 
 function detectVRHeadset() {
   const userAgent = navigator.userAgent.toLowerCase();
@@ -388,13 +464,21 @@ export default function Home() {
   // this exists to prevent build errors with ssr
   useEffect(() => setShowContent(true), []);
   useEffect(() => setDevMode(readDevMode()), []);
-  if (!showContent) return <></>;
+  if (!showContent) {
+    return (
+      <>
+        <PageHead />
+        <main className="min-h-screen bg-slate-950 px-6 py-20 text-white">
+          <HomeAbout loading />
+        </main>
+      </>
+    );
+  }
 
   return (
-    <div className={clsx(
-      m_plus_2.variable,
-      montserrat.variable,
-    )}>
+    <div>
+      <PageHead />
+      <HomeAbout />
       { config("youtube_videoid") !== '' && (
         <div className="fixed video-container w-full h-full z-0">
           <iframe

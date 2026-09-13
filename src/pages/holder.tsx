@@ -23,7 +23,7 @@
  * destination. A money destination never comes from a link someone sent you.
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import Head from 'next/head';
+import { SeoHead } from '@/components/seoHead';
 import { Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 
 import { API, MAX_TIP_SOL, MIN_TIP_SOL, RPC, TIP_WALLET, apiDeadline, checkTipDestination, readJson } from '../npc/config.ts';
@@ -400,14 +400,19 @@ export default function HolderPage() {
 
   return (
     <div className="npcg-root">
-      <Head><title>$KAMIKO — holder dashboard</title></Head>
+      <SeoHead
+        title="Kamiko Holder Dashboard"
+        description="Connect a wallet to view Kamiko holder tiers, perks, and tip status. Unavailable features are clearly marked when the live API is not configured."
+        path="/holder/"
+        noindex
+      />
       {/* raw-text element — see agents.tsx: a text child is SSR entity-escaped (`>` → `&gt;`) and
           never un-escaped, breaking `.npcg-bar>span` pre-hydration and mismatching hydration. */}
       <style dangerouslySetInnerHTML={{ __html: NPC_CSS }} />
 
       <div className="npcg-wrap">
         <header className="npcg-head">
-          <div className="npcg-logo">$<b>KAMIKO</b></div>
+          <h1 className="npcg-logo">$<b>KAMIKO</b></h1>
           <span className="npcg-ca">holder dashboard</span>
         </header>
 

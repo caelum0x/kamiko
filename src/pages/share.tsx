@@ -19,6 +19,7 @@ import 'filepond/dist/filepond.min.css';
 import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css';
 import { vrmDataProvider } from "@/features/vrmStore/vrmDataProvider";
 import { IconButton } from '@/components/iconButton';
+import { SeoHead } from '@/components/seoHead';
 
 registerPlugin(
   FilePondPluginImagePreview,
@@ -210,8 +211,13 @@ export default function Share() {
   }, []);
 
   return (
-    
     <div className="p-10 md:p-20">
+      <SeoHead
+        title="Kamiko Character Creator"
+        description="Create and share a custom Kamiko character configuration. This utility page is excluded from search results."
+        path="/share/"
+        noindex
+      />
       <style jsx global>
         {`
         body {
