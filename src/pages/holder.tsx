@@ -316,9 +316,14 @@ export default function HolderPage() {
       // Wrap the global fetch so the RPC read has a deadline. The Fetch API is callable but does
       // not expose Node-only connection helpers such as `preconnect`; copying one made the static
       // browser build fail its typecheck without changing runtime behavior.
-      const deadlineFetch: typeof fetch =
-        (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
-          fetch(input, { ...init, signal: apiDeadline(BLOCKHASH_TIMEOUT_MS) });
+      const deadlineFetch = ((
+        input: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1],
+      ) =>
+        fetch(input, {
+          ...init,
+          signal: apiDeadline(BLOCKHASH_TIMEOUT_MS),
+        })) as typeof fetch;
       const conn = new Connection(RPC, { commitment: 'confirmed', fetch: deadlineFetch });
       const from = new PublicKey(wallet);
       const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
