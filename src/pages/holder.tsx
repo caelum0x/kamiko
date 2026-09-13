@@ -313,14 +313,12 @@ export default function HolderPage() {
       // would leave the page on "building transaction…" forever, with the user unsure whether
       // anything was sent. Nothing has been signed at this point, so an abort here is genuinely
       // "cancelled, nothing left your wallet" — the one moment that sentence is still true.
-      // The deadline is applied by WRAPPING the global fetch rather than replacing it: web3.js
-      // types this option as the whole `typeof fetch` (it carries `preconnect`), and a bare arrow
-      // drops members the library is entitled to use.
-      const deadlineFetch: typeof fetch = Object.assign(
+      // Wrap the global fetch so the RPC read has a deadline. The Fetch API is callable but does
+      // not expose Node-only connection helpers such as `preconnect`; copying one made the static
+      // browser build fail its typecheck without changing runtime behavior.
+      const deadlineFetch: typeof fetch =
         (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
-          fetch(input, { ...init, signal: apiDeadline(BLOCKHASH_TIMEOUT_MS) }),
-        { preconnect: fetch.preconnect },
-      );
+          fetch(input, { ...init, signal: apiDeadline(BLOCKHASH_TIMEOUT_MS) });
       const conn = new Connection(RPC, { commitment: 'confirmed', fetch: deadlineFetch });
       const from = new PublicKey(wallet);
       const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
