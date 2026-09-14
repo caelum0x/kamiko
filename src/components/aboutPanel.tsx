@@ -58,15 +58,11 @@ import { useEscapeToClose } from '@/features/stage/useEscapeToClose';
 export const HOME_FAQ = [
   {
     question: 'What is Kamiko?',
-    answer: 'Kamiko is an interactive 3D AI VTuber experience with chat, a tap-to-wake game, public project checks, and an AI agent directory.',
+    answer: 'Kamiko is an interactive 3D AI VTuber you can talk to in your browser, with chat, voice, and a tap-to-wake game.',
   },
   {
-    question: 'Do I need a wallet to use Kamiko?',
-    answer: 'No. You can open the 3D experience and play the local tap-to-wake loop without a wallet. A wallet is only needed for holder-specific features.',
-  },
-  {
-    question: 'Where can I verify Kamiko token claims?',
-    answer: 'Use the project trust page for the current verification status, warnings, and any officially published mint information. Treat claims elsewhere as unverified.',
+    question: 'Do I need a wallet or an account to use Kamiko?',
+    answer: 'No. Kamiko runs entirely in your browser — just open the page and start talking. Nothing is required to explore her.',
   },
 ] as const;
 
@@ -88,24 +84,6 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
  */
 function SectionHeading({ id, children }: { id: string; children: React.ReactNode }) {
   return <h2 id={id} className={EYEBROW}>{children}</h2>;
-}
-
-/**
- * A link inside the prose — white, not accent-coloured.
- *
- * The old card coloured all four of its links emerald, which on a dark stage reads as a nav bar
- * wearing a paragraph's clothes. In a document, a link is a word with a line under it; the accent
- * is spent once, on the rule that ties this panel to the menu.
- */
-function ProseLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <a
-      href={href}
-      className="underline decoration-white/30 underline-offset-2 hover:decoration-white focus-visible:decoration-white"
-    >
-      {children}
-    </a>
-  );
 }
 
 /**
@@ -134,32 +112,16 @@ export function AboutProse() {
         <p className="mt-1.5 text-xs leading-relaxed text-white/85">
           Kamiko is an interactive 3D AI VTuber experience. This screen is the whole thing: a live
           avatar, chat, voice, and a tap-to-wake panel in one browser stage. The menu on the left
-          changes how she looks and sounds, opens the chat history, and reaches the public Kamiko
-          features.
+          changes how she looks and sounds and opens the chat history — no wallet or sign-up needed.
         </p>
       </section>
 
       <section className="mt-4 border-t border-white/15 pt-3" aria-labelledby="kamiko-do">
         <SectionHeading id="kamiko-do">what you can do here</SectionHeading>
         <p className="mt-1.5 text-xs leading-relaxed text-white/85">
-          The tap-to-wake game runs on this screen, in a panel over the avatar. It counts your taps,
-          changes her mood, and shows quests and the public leaderboard when the live service is
-          configured. The{' '}
-          <ProseLink href="/agents">AI agent directory</ProseLink> lists registered character
-          profiles and labels self-reported or unverified claims instead of treating them as
-          endorsements.
-        </p>
-      </section>
-
-      <section className="mt-4 border-t border-white/15 pt-3" aria-labelledby="kamiko-trust">
-        <SectionHeading id="kamiko-trust">before you trust a mint</SectionHeading>
-        <p className="mt-1.5 text-xs leading-relaxed text-white/85">
-          Before relying on a token name, mint, market link, or holder claim, open the{' '}
-          <ProseLink href="/trust">project trust page</ProseLink>. It reports what could be checked,
-          what remains unknown, and when the result was produced. Wallet-connected tiers, perks,
-          topic suggestions, and tipping live in the{' '}
-          <ProseLink href="/holder">holder dashboard</ProseLink>; that utility is separate from the
-          public game and is not required to explore Kamiko.
+          Talk to her by chat or voice, and she talks back in character. The tap-to-wake game runs on
+          this screen too, in a panel over the avatar: it counts your taps and changes her mood. React
+          with emotes or change the backdrop from the same menu.
         </p>
       </section>
 

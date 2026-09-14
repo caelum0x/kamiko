@@ -67,19 +67,21 @@ describe('when the stage throws', () => {
     expect(text()).toContain('interactive 3D AI VTuber experience');
   });
 
-  it('the funnel is still reachable — including the page somebody opens to check the mint', () => {
+  it('carries no link to a removed funnel page — the crash surface is description + FAQ, not a nav', () => {
     /*
-     * This is the assertion that matters most and the one a generic boundary cannot make. Somebody
-     * whose browser cannot draw her is exactly the person who should still be able to reach /trust
-     * before deciding what to think about a token.
+     * The crash surface renders the same AboutProse the "what is this?" panel does. Those pages
+     * (/game, /trust, /agents, /holder) were deleted — they needed a live backend + a launched mint
+     * and only rendered empty states — so the boundary no longer points anywhere. What matters now
+     * is that it still SAYS what the site is (asserted below), not that it links onward.
      */
     mount(<Boom error={new Error('Error creating WebGL context.')} />);
-    expect(hrefs()).toEqual(expect.arrayContaining(['/trust', '/holder', '/agents']));
+    const dead = hrefs().filter((h): h is string => h != null && ['/game', '/trust', '/agents', '/holder'].some((r) => h === r || h.startsWith(r + '/')));
+    expect(dead.length ? `still links to ${dead.join(', ')}` : 'no dead links').toBe('no dead links');
   });
 
   it('the FAQ comes with it, so the crash page is a real page and not a stub', () => {
     mount(<Boom error={new Error('boom')} />);
-    expect(text()).toContain('Do I need a wallet to use Kamiko?');
+    expect(text()).toContain('Do I need a wallet or an account to use Kamiko?');
   });
 
   it('names the cause instead of apologising', () => {

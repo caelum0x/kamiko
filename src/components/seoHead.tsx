@@ -2,6 +2,15 @@ import Head from 'next/head';
 
 const SITE_URL = 'https://kamiko.fun';
 const SOCIAL_IMAGE = `${SITE_URL}/ogp.png`;
+const SOCIAL_IMAGE_ALT =
+  '$KAMIKO — the AI girl who woke up inside NVIDIA, a live 3D AI VTuber paired with NVDAx';
+// TODO(kamiko): No official $KAMIKO project X/Twitter handle exists in the repo
+// as of 2026-09-14 (the README badges point to the upstream Arbius/airi accounts,
+// not to Kamiko). Set this to the real handle (e.g. '@kamiko') once the account
+// is created so twitter:site / twitter:creator card attribution works. Left empty
+// on purpose — do NOT invent a handle. When empty, those tags are omitted rather
+// than shipping a fake attribution.
+const TWITTER_HANDLE = '';
 const GOOGLE_SITE_VERIFICATION =
   process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
 
@@ -86,13 +95,23 @@ export function SeoHead({
       <meta property="og:title" content={title} />
       <meta property="og:description" content={description} />
       <meta property="og:image" content={SOCIAL_IMAGE} />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+      <meta property="og:image:alt" content={SOCIAL_IMAGE_ALT} />
       <meta property="og:url" content={canonical} />
       <meta property="og:type" content="website" />
       <meta property="og:site_name" content="$KAMIKO" />
       <meta name="twitter:card" content="summary_large_image" />
+      {TWITTER_HANDLE ? (
+        <>
+          <meta name="twitter:site" content={TWITTER_HANDLE} />
+          <meta name="twitter:creator" content={TWITTER_HANDLE} />
+        </>
+      ) : null}
       <meta name="twitter:title" content={title} />
       <meta name="twitter:description" content={description} />
       <meta name="twitter:image" content={SOCIAL_IMAGE} />
+      <meta name="twitter:image:alt" content={SOCIAL_IMAGE_ALT} />
       {structuredData ? (
         <script
           type="application/ld+json"

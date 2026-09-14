@@ -113,11 +113,12 @@ describe('nothing in it leaves for a surface that is on this screen', () => {
     }
   });
 
-  it('links only to the three surfaces that are genuinely elsewhere', () => {
-    // /trust, /agents and /holder are real separate pages and a sentence about them should link to
-    // them. The point of the rewrite was not "no links", it was no links to a page whose content is
-    // already on this screen — and no nav bar wearing a paragraph's clothes.
-    expect(new Set(hrefs(open))).toEqual(new Set(['/agents', '/trust', '/holder']));
+  it('links nowhere — the funnel pages it used to point at were removed', () => {
+    // /game, /trust, /agents and /holder needed a live backend + a launched mint and only ever
+    // rendered empty "not connected" states, so they were deleted. The panel is now pure prose:
+    // the description and FAQ, and no exit links at all.
+    expect(hrefs(open)).toEqual([]);
+    expect(hrefs(doc)).toEqual([]);
   });
 });
 

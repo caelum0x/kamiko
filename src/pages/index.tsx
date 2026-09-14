@@ -24,9 +24,6 @@ import {
   WrenchScrewdriverIcon,
   AcademicCapIcon,
   CursorArrowRaysIcon,
-  CurrencyDollarIcon,
-  ShieldCheckIcon,
-  UserGroupIcon,
   FaceSmileIcon,
   PhotoIcon,
   InformationCircleIcon,
@@ -669,24 +666,12 @@ export default function Home() {
               onClick={() => toggleOverlay('backdrops')}
               label="change the background"
             />
-            <MenuButton
-              large={isVRHeadset}
-              icon={CurrencyDollarIcon}
-              onClick={() => router.push("/holder")}
-              label="holder dashboard"
-            />
-            <MenuButton
-              large={isVRHeadset}
-              icon={ShieldCheckIcon}
-              onClick={() => router.push("/trust")}
-              label="trust / verify the mint"
-            />
-            <MenuButton
-              large={isVRHeadset}
-              icon={UserGroupIcon}
-              onClick={() => router.push("/agents")}
-              label="agents"
-            />
+            {/*
+              The /holder, /trust and /agents buttons are gone: each needs a live backend (funnel
+              API + registry) and a launched mint to show anything, and otherwise rendered only empty
+              "not connected" states. Those pages were deleted; the stage is the VTuber + chat + the
+              on-stage tap-to-wake.
+            */}
 
             <div className="flex flex-row items-center space-x-2">
                 <VerticalSwitchBox

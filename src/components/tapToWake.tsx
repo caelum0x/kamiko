@@ -436,16 +436,17 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
         into the void on both of its surfaces.
       */}
       {!configured ? (
-        <p className="mt-2 rounded-lg bg-amber-500/20 p-2 text-[11px] leading-snug">
-          this build has no funnel API configured (NEXT_PUBLIC_NPC_API), so these taps are counted
-          on your device only — nothing reaches the leaderboard, the streak or her memory.
+        <p className="mt-2 rounded-lg bg-white/10 p-2 text-[11px] leading-snug opacity-80">
+          Taps are counted on your device only — a fun local loop. Online scores, streaks and
+          rewards arrive when Kamiko&apos;s live service is connected.
         </p>
       ) : null}
 
       <div className="mt-2 flex justify-between text-xs opacity-70">
         <span>you: {taps}</span>
-        {/* '…' until a real number lands — never a seeded value that later collapses. */}
-        <span>all: {global === null ? '…' : global.toLocaleString()}</span>
+        {/* '…' until a real number lands — never a seeded value that later collapses. Hidden with
+            no backend so a dangling "all: …" never sits on a local-only clicker. */}
+        {configured ? <span>all: {global === null ? '…' : global.toLocaleString()}</span> : null}
       </div>
       {streak ? <div className="mt-1 text-xs opacity-70">streak: {streak.streak}d (best {streak.best})</div> : null}
 
@@ -461,6 +462,7 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
         refusal rather than as an empty board, because "nobody is playing" and "we could not ask"
         are different statements and only one of them is ever true here.
       */}
+      {configured && (
       <div className="mt-3 border-t border-white/15 pt-2">
         <div className="text-[10px] uppercase tracking-widest opacity-60">leaderboard</div>
         {board.rows === null ? (
@@ -478,6 +480,7 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
           </ol>
         )}
       </div>
+      )}
 
       {/* QUESTS */}
       {board.quests ? (
@@ -515,6 +518,7 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
         verifier failed, or never graded, is the one thing on this panel that can cost somebody
         money, so the link renders only for a `live` reading.
       */}
+      {configured && (<>
       <div className="mt-3 border-t border-white/15 pt-2">
         <button onClick={() => void board.copyCa()} className="w-full truncate text-left text-[11px] opacity-80 hover:opacity-100">
           {board.caText}
@@ -555,6 +559,7 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
         )}
         {walletMsg ? <p aria-live="polite" className="mt-1 text-[11px] opacity-70">{walletMsg}</p> : null}
       </div>
+      </>)}
 
       {/* STREAK SAVER — offered only where it can actually be delivered. */}
       {pushOffer ? (
