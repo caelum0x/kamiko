@@ -95,8 +95,20 @@ module.exports = withSentryConfig(module.exports, {
   // For all available options, see:
   // https://github.com/getsentry/sentry-webpack-plugin#options
 
-  org: "heyamica",
-  project: "chat-heyamica",
+  /*
+   * WHOSE SENTRY PROJECT THIS IS.
+   *
+   * These two were "heyamica" / "chat-heyamica" — upstream Amica's org and project, written by
+   * their setup wizard and carried into this fork untouched. Combined with the hardcoded DSNs in
+   * the three sentry.*.config.ts files (now env-gated), that pointed this deployment's errors,
+   * traces and session replays at somebody else's account.
+   *
+   * Left undefined by default. The Sentry build plugin only uploads source maps when SENTRY_AUTH_
+   * TOKEN is present anyway, so a build without these three variables behaves exactly as it does
+   * today, minus the wrong destination.
+   */
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
 
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
