@@ -13,9 +13,15 @@
  * TTS to viewer.model.speak, which is what moves her face. That is the difference between a
  * counter and waking her.
  *
- * IT DOES NOT DUPLICATE THE DASHBOARD. The leaderboard, quests, the CTA, the wallet handshake and
- * the streak-saver offer stay on `/game`, which remains the full funnel surface. This is the tap
- * loop and nothing else, so the avatar keeps the screen.
+ * IT CARRIES THE WHOLE FUNNEL NOW, and this paragraph used to say the opposite. The first version
+ * was the tap loop alone, with the leaderboard, quests, the CTA, the wallet handshake and the
+ * streak-saver offer left on `/game` — which meant the panel showed a leaderboard nobody could
+ * claim a place on and a streak nobody could be reminded of, and the only way to reach either was
+ * the navigation this component exists to delete. All of it is below now, in one scrolling column
+ * capped at 70vh so the avatar keeps the screen.
+ *
+ * `/game` still resolves for a direct link from an ad or a post, but nothing in the UI walks anybody
+ * into it; __tests__/funnelReachable.spec.ts fails the build if a link to it reappears.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWakeTaps, type WakeMood } from '@/npc/useWakeTaps';
@@ -23,6 +29,7 @@ import { useNpcBoard } from '@/npc/useNpcBoard';
 import { useWalletLink } from '@/npc/useWalletLink';
 import { shortAddr } from '@/npc/identity';
 import { API, readJson } from '@/npc/config';
+import { useEscapeToClose } from '@/features/stage/useEscapeToClose';
 
 /**
  * The NVDAX quote mint she is paired against — the "NVIDIA" xStock on Solana (Token-2022).
@@ -365,15 +372,15 @@ export function TapToWake({ speak, setMood, onTap: onTapSignal, openLink, onClos
     [tap],
   );
 
-  // Escape closes it. A panel that overlays the avatar and can only be dismissed with the mouse is
-  // one people leave open by accident on the screen whose whole point is what is behind it.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  /*
+   * Escape closes it. A panel that overlays the avatar and can only be dismissed with the mouse is
+   * one people leave open by accident on the screen whose whole point is what is behind it.
+   *
+   * It was an inline effect listing `onClose` in its dependencies — and the host passes an inline
+   * arrow, so the listener was torn down and re-registered on every render of the stage, which is
+   * every chat message. The shared hook reads the callback off a ref instead.
+   */
+  useEscapeToClose(onClose);
 
   const pct = Math.round(awake);
 

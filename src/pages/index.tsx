@@ -29,6 +29,7 @@ import {
   UserGroupIcon,
   FaceSmileIcon,
   PhotoIcon,
+  InformationCircleIcon,
 } from "@heroicons/react/24/outline";
 
 import { MenuButton } from "@/components/menuButton";
@@ -51,6 +52,7 @@ import { Message, Role } from "@/features/chat/messages";
 import { ChatContext } from "@/features/chat/chatContext";
 import { textsToScreenplay } from "@/features/chat/messages";
 import { TapToWake, MarketHud } from "@/components/tapToWake";
+import { AboutPanel, AboutDocument, HOME_FAQ } from "@/components/aboutPanel";
 import { EmoteBar } from "@/components/emoteBar";
 import { BackdropPicker } from "@/components/backdropPicker";
 import { AlertContext } from "@/features/alert/alertContext";
@@ -62,6 +64,12 @@ import {
   resolveBackground,
   type Backdrop,
 } from "@/features/stage/background";
+import {
+  closeStageOverlay,
+  toggleStageOverlay,
+  type StageOverlay,
+} from "@/features/stage/overlays";
+import { RAIL_ANCHOR_CLASS, RAIL_COLUMN_CLASS } from "@/features/stage/menuFit";
 
 import { config, updateConfig } from '@/utils/config';
 import { isTauri } from '@/utils/isTauri';
@@ -81,21 +89,6 @@ const PAGE_TITLE = "$KAMIKO — Live AI VTuber and Tap-to-Wake Game";
 const PAGE_DESCRIPTION =
   "Meet Kamiko, a live 3D AI VTuber who reacts to chat and market signals. Play the tap-to-wake game, view holder perks, and verify the project.";
 
-const HOME_FAQ = [
-  {
-    question: 'What is Kamiko?',
-    answer: 'Kamiko is an interactive 3D AI VTuber experience with chat, a tap-to-wake game, public project checks, and an AI agent directory.',
-  },
-  {
-    question: 'Do I need a wallet to use Kamiko?',
-    answer: 'No. You can open the 3D experience and play the local tap-to-wake loop without a wallet. A wallet is only needed for holder-specific features.',
-  },
-  {
-    question: 'Where can I verify Kamiko token claims?',
-    answer: 'Use the project trust page for the current verification status, warnings, and any officially published mint information. Treat claims elsewhere as unverified.',
-  },
-] as const;
-
 function PageHead() {
   return (
     <SeoHead
@@ -105,64 +98,6 @@ function PageHead() {
       websiteSchema
       faq={HOME_FAQ}
     />
-  );
-}
-
-function HomeAbout({ loading = false }: { loading?: boolean }) {
-  return (
-    <section
-      aria-labelledby="kamiko-heading"
-      className={loading
-        ? 'mx-auto w-full max-w-2xl rounded-2xl border border-slate-700 bg-slate-900 p-6'
-        : 'fixed bottom-24 right-3 z-10 w-[min(22rem,calc(100vw-1.5rem))] rounded-xl border border-slate-700 bg-slate-950/90 p-3 text-white shadow-xl backdrop-blur-md'}
-    >
-      <h1 id="kamiko-heading" className={loading ? 'text-4xl font-bold' : 'text-sm font-bold'}>
-        Kamiko, the live AI VTuber
-      </h1>
-      <details className="mt-2 text-sm text-slate-300" open={loading}>
-        <summary className="cursor-pointer font-medium text-emerald-300">
-          What you can do here
-        </summary>
-        <div className="mt-3 max-h-[55vh] space-y-3 overflow-auto pr-1 leading-6">
-          <p>
-            Kamiko is an interactive 3D AI VTuber experience. The home screen combines a live avatar,
-            chat controls, voice, and a tap-to-wake panel in one browser-based stage. Open the tools
-            menu to change the experience, inspect chat history, or launch one of the public Kamiko
-            features.
-          </p>
-          <p>
-            The <a href="/game" className="underline">tap-to-wake game</a> tracks taps on your device,
-            changes Kamiko&apos;s mood, and shows public quests or leaderboard data when the live service is
-            configured. The <a href="/agents" className="underline">AI agent directory</a> lists registered
-            character profiles and labels self-reported or unverified claims instead of treating them as
-            endorsements.
-          </p>
-          <p>
-            Before relying on a token name, mint, market link, or holder claim, open the
-            {' '}<a href="/trust" className="underline">project trust page</a>. It reports what could be
-            checked, what remains unknown, and when the result was produced. Wallet-connected tiers,
-            perks, topic suggestions, and tipping live in the
-            {' '}<a href="/holder" className="underline">holder dashboard</a>; that utility is separate
-            from the public game and is not required to explore Kamiko.
-          </p>
-          <div aria-labelledby="kamiko-faq-heading">
-            <h2 id="kamiko-faq-heading" className="font-semibold text-white">Kamiko FAQ</h2>
-            {HOME_FAQ.map(({ question, answer }) => (
-              <div key={question} className="mt-2">
-                <h3 className="font-medium text-white">{question}</h3>
-                <p>{answer}</p>
-              </div>
-            ))}
-          </div>
-          <nav aria-label="Explore Kamiko" className="flex flex-wrap gap-x-4 gap-y-2 text-emerald-300">
-            <a href="/game" className="underline">Play the game</a>
-            <a href="/trust" className="underline">Verify the project</a>
-            <a href="/agents" className="underline">Explore agents</a>
-            <a href="/holder" className="underline">Holder tools</a>
-          </nav>
-        </div>
-      </details>
-    </section>
   );
 }
 
@@ -349,6 +284,40 @@ export default function Home() {
   const [showTapToWake, setShowTapToWake] = useState(false);
   const [showEmotes, setShowEmotes] = useState(false);
   const [showBackdrops, setShowBackdrops] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
+
+  /*
+   * ONE BIG PANEL AT A TIME, and this is the reported bug in its second form.
+   *
+   * The four overlays only stay out of each other's way on a desktop viewport. At 390px the about
+   * column spans 48-374px of a 390px screen and the tap panel spans 118-374px, so opening both put
+   * two dark cards on top of each other over her — which is exactly what the old about-card did in
+   * the bottom-right corner, and exactly what this whole change set out to stop.
+   *
+   * The rule itself is in features/stage/overlays.ts, pure and tested: opening a panel closes
+   * whatever cannot share the screen with it, the two trays still stack together because they are
+   * drawn into one column on purpose, and CLOSING a panel touches nothing but itself. Here we only
+   * apply the answer to the four pieces of state the stage already keeps.
+   */
+  const overlays = { about: showAbout, tap: showTapToWake, emotes: showEmotes, backdrops: showBackdrops };
+
+  const writeOverlays = useCallback((next: typeof overlays) => {
+    setShowAbout(next.about);
+    setShowTapToWake(next.tap);
+    setShowEmotes(next.emotes);
+    setShowBackdrops(next.backdrops);
+  }, []);
+
+  /** Press the menu button for an overlay. */
+  const toggleOverlay = useCallback((which: StageOverlay) => {
+    writeOverlays(toggleStageOverlay(overlays, which));
+  }, [overlays, writeOverlays]);
+
+  /** The × on a panel, or Escape: dismiss that one, disturb nothing else. */
+  const closeOverlay = useCallback((which: StageOverlay) => {
+    writeOverlays(closeStageOverlay(overlays, which));
+  }, [overlays, writeOverlays]);
+
   /** The active backdrop, mirrored into state only so the picker can paint its selected tile. */
   const [backdropId, setBackdropId] = useState('');
   /*
@@ -469,7 +438,7 @@ export default function Home() {
       <>
         <PageHead />
         <main className="min-h-screen bg-slate-950 px-6 py-20 text-white">
-          <HomeAbout loading />
+          <AboutDocument />
         </main>
       </>
     );
@@ -478,7 +447,6 @@ export default function Home() {
   return (
     <div>
       <PageHead />
-      <HomeAbout />
       { config("youtube_videoid") !== '' && (
         <div className="fixed video-container w-full h-full z-0">
           <iframe
@@ -529,21 +497,48 @@ export default function Home() {
       */}
       {(showEmotes || showBackdrops) && (
         <div className="pointer-events-none fixed right-2 top-20 z-20 flex flex-col items-end gap-2">
-          {showEmotes && <EmoteBar onPlay={playEmote} onClose={() => setShowEmotes(false)} />}
+          {showEmotes && <EmoteBar onPlay={playEmote} onClose={() => closeOverlay('emotes')} />}
           {showBackdrops && (
             <BackdropPicker
               activeId={backdropId}
               onPick={pickBackdrop}
-              onClose={() => setShowBackdrops(false)}
+              onClose={() => closeOverlay('backdrops')}
             />
           )}
         </div>
       )}
 
-      {/* main menu */}
-      <div className="absolute z-10 m-2">
+      {/*
+        main menu — and it is capped to the viewport now.
+
+        Twelve items of 28px with 12px between them is 496px of rail, which does not fit a phone
+        held sideways (~330px) or a half-height desktop window, and the column had no ceiling and no
+        scroll. What fell off the bottom was backdrops, the holder dashboard, trust and agents: the
+        revenue surface and the page somebody opens to verify the mint. features/stage/menuFit.ts
+        carries the measurements, the reason `fixed` replaced `absolute`, and the reason the column
+        may not centre its children.
+      */}
+      <div className={RAIL_ANCHOR_CLASS}>
         <div className="grid grid-flow-col gap-[8px] place-content-end mt-2 bg-slate-800/40 rounded-md backdrop-blur-md shadow-sm">
-          <div className='flex flex-col justify-center items-center p-1 space-y-3'>
+          <div className={RAIL_COLUMN_CLASS}>
+            {/*
+              FIRST ON THE RAIL, because it answers the first question.
+              This replaces a card that was pinned over the avatar at all times so that `/` — a
+              WebGL canvas with no text of its own — had a description in the DOM for crawlers and
+              for screen readers. It got the text onto the page and made the page worse: it spoke
+              none of this stage's visual language, it overlapped the tap panel in the same corner,
+              and all four of its links navigated away (components/aboutPanel.tsx has the autopsy).
+
+              The prose did not move into a menu; only its TRIGGER did. AboutPanel is mounted below
+              whether or not it is open, and hides with `hidden` rather than unmounting, so the text
+              is still in the rendered DOM exactly as a collapsed <details> would be.
+            */}
+            <MenuButton
+              large={isVRHeadset}
+              icon={InformationCircleIcon}
+              onClick={() => toggleOverlay('about')}
+              label="what is this?"
+            />
             <MenuButton
               large={isVRHeadset}
               icon={WrenchScrewdriverIcon}
@@ -635,17 +630,24 @@ export default function Home() {
               BASE_PATH deployment every one of these would open a 404. The router applies it.
             */}
             {/*
-              IT OPENS HERE NOW, instead of `router.push("/game")`.
-              The game is called "tap to wake her" and /game renders no avatar and speaks with a
-              local string pool, so the button built to drive retention navigated away from the one
-              thing this product is. The panel mounts over the stage and her line is spoken by the
-              real pipeline; /game stays exactly where it was for the full dashboard — leaderboard,
-              quests, the CTA, the wallet handshake — which does not belong on top of the stage.
+              IT OPENS HERE, and NOTHING IN THE UI NAVIGATES TO /game ANY MORE.
+              The game is called "tap to wake her" and /game renders no avatar and speaks from a
+              local string pool, so a button built to drive retention navigated away from the one
+              thing this product is. The panel mounts over the stage, her line is spoken by the real
+              pipeline, and it carries the whole funnel — meter, leaderboard, quests, level, the
+              verified CTA, the wallet handshake, the streak saver — so there is nothing left on
+              /game that leaving her would buy you.
+
+              The route still resolves, for a direct link from an ad or a post. It is simply not
+              somewhere this product sends anybody: an unannounced jump from a WebGL stage to a
+              full-page dashboard reads as a different site, and it is the one piece of this UI a
+              first-time visitor could not explain afterwards. funnelReachable.spec.ts fails the
+              build if a link to it reappears on any of these screens.
             */}
             <MenuButton
               large={isVRHeadset}
               icon={CursorArrowRaysIcon}
-              onClick={() => setShowTapToWake((v) => !v)}
+              onClick={() => toggleOverlay('tap')}
               label="tap to wake her"
             />
             {/*
@@ -658,13 +660,13 @@ export default function Home() {
             <MenuButton
               large={isVRHeadset}
               icon={FaceSmileIcon}
-              onClick={() => setShowEmotes((v) => !v)}
+              onClick={() => toggleOverlay('emotes')}
               label="emotes"
             />
             <MenuButton
               large={isVRHeadset}
               icon={PhotoIcon}
-              onClick={() => setShowBackdrops((v) => !v)}
+              onClick={() => toggleOverlay('backdrops')}
               label="change the background"
             />
             <MenuButton
@@ -699,6 +701,13 @@ export default function Home() {
       </div>
 
       {showChatLog && <ChatLog messages={chatLog} />}
+
+      {/*
+        WHAT THIS IS — always mounted, painted only when asked for. See the `hidden` note in
+        components/aboutPanel.tsx: this is the page's only prose, and putting it behind `&&` would
+        take it out of the DOM that indexes the page the moment the stage hydrates.
+      */}
+      <AboutPanel open={showAbout} onClose={() => closeOverlay('about')} />
 
       {/*
         The clicker, over the stage rather than instead of it. It is deliberately mounted here —
@@ -761,7 +770,7 @@ export default function Home() {
             // the destination cannot reach back into this window.
             try { window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* popup blocked */ }
           }}
-          onClose={() => setShowTapToWake(false)}
+          onClose={() => closeOverlay('tap')}
         />
       )}
 

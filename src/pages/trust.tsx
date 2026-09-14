@@ -136,7 +136,7 @@ export default function TrustPage() {
       <div className="npct-wrap">
         <header className="npct-head">
           <h1 className="npct-logo">Verify $<b>KAMIKO</b> <span>/ trust and token checks</span></h1>
-          <a href="/game" className="npct-back">← game</a>
+          <a href="/" className="npct-back">← Kamiko</a>
         </header>
 
         <section className="npct-card" aria-labelledby="trust-page-about">

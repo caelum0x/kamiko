@@ -12,6 +12,7 @@
 import { XMarkIcon } from '@heroicons/react/24/outline';
 
 import { BACKDROPS, type Backdrop } from '@/features/stage/background';
+import { useEscapeToClose } from '@/features/stage/useEscapeToClose';
 import { thumbPrefix } from '@/components/settings/common';
 
 export interface BackdropPickerProps {
@@ -22,6 +23,9 @@ export interface BackdropPickerProps {
 }
 
 export function BackdropPicker({ activeId, onPick, onClose }: BackdropPickerProps) {
+  // Escape, the same as every other panel on this stage. See features/stage/useEscapeToClose.ts.
+  useEscapeToClose(onClose);
+
   return (
     <div className="pointer-events-auto flex max-h-[52vh] w-[8.5rem] flex-col rounded-2xl bg-black/70 p-2 text-white backdrop-blur-sm">
       <div className="flex items-center justify-between px-1 pb-1">

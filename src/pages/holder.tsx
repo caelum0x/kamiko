@@ -559,7 +559,6 @@ export default function HolderPage() {
         </div>
 
         <div className="npcg-links">
-          <a href="/game">👆 The game</a>
           <a href="/">🎤 Talk to her</a>
           <a href="/trust">🛡️ Trust</a>
           <a href="/agents">🤖 Agents</a>

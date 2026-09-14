@@ -336,7 +336,7 @@ export default function AgentsPage() {
       <div className="npcg-wrap npca-wrap">
         <header className="npcg-head">
           <h1 className="npcg-logo">$<b>KAMIKO</b> <span className="npca-sub">/ AI VTuber agents</span></h1>
-          <a href="/game" className="npca-back">← game</a>
+          <a href="/" className="npca-back">← Kamiko</a>
         </header>
 
         <section className="npcg-panel" aria-labelledby="agent-directory-about">
@@ -427,7 +427,6 @@ export default function AgentsPage() {
 
         <div className="npcg-links">
           <a href="/">🎤 Talk to her</a>
-          <a href="/game">👆 The game</a>
           <a href="/trust">🛡️ Trust</a>
         </div>
 

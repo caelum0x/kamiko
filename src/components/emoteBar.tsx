@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 
 import { EMOTE_LIST, type Emote, type EmoteId } from '@/features/emote/emotes';
+import { useEscapeToClose } from '@/features/stage/useEscapeToClose';
 
 export interface EmoteBarProps {
   /** Play it. The host owns the avatar; this component never touches the viewer. */
@@ -29,6 +30,10 @@ export function EmoteBar({ onPlay, onClose }: EmoteBarProps) {
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
   }, []);
+
+  // Escape, the same as every other panel on this stage. The tray only exists while it is open, so
+  // no `active` gate is needed. See features/stage/useEscapeToClose.ts.
+  useEscapeToClose(onClose);
 
   const play = (emote: Emote) => {
     onPlay(emote);

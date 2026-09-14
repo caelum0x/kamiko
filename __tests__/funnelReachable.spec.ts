@@ -101,6 +101,42 @@ describe('the front door leads to every funnel surface', () => {
     });
   }
 
+  /**
+   * THE OTHER HALF OF THE RULE: no screen may send anybody to /game.
+   *
+   * "Reachable" was the only property this file checked, and the gap it left shipped. The front
+   * page carried an SEO panel pinned over the avatar whose first link was "the tap-to-wake game" →
+   * /game, and every secondary page's back-link pointed there too — so the product's answer to
+   * "what is this?" was a one-click jump from a WebGL stage to a full-page clicker dashboard in a
+   * completely different visual language. It was the one thing about this UI a first-time visitor
+   * could not explain afterwards, and it was reported as exactly that.
+   *
+   * The panel already carries the whole funnel (asserted below), so the link bought nothing. The
+   * route stays for a direct link from an ad or a post; nothing in the UI walks anybody into it.
+   *
+   * game.tsx is excluded — it is the page, and its own SeoHead `path` names itself.
+   */
+  it('no screen links to /game — the game is ON the stage, not one navigation away', () => {
+    const SCREENS = [
+      'src/pages/index.tsx',
+      // Where the home page's prose lives now. The /game links this rule exists for were IN that
+      // prose, so a list that scanned index.tsx alone would be guarding the room they moved out of.
+      'src/components/aboutPanel.tsx',
+      'src/components/tapToWake.tsx',
+      'src/pages/trust.tsx',
+      'src/pages/agents.tsx',
+      'src/pages/holder.tsx',
+    ];
+    // Literals KEPT: the thing being asserted is the text of an href or a router.push argument.
+    // Comments stripped, because every one of these files explains in prose why /game is not linked
+    // and a scan that counted prose would fail on its own documentation.
+    const linking = SCREENS.filter((f) => /["'`]\/game/.test(sourceKeepingLiterals(read(f))));
+    const verdict = linking.length
+      ? `${linking.join(', ')} link(s) to /game — the tap panel is on the stage and carries the whole funnel, so this is a jump to a different-looking page that buys the visitor nothing.`
+      : 'nothing links to /game';
+    expect(verdict).toBe('nothing links to /game');
+  });
+
   it('the clicker dashboard is ON the page, not one navigation away', () => {
     /*
      * THE RULE CHANGED, DELIBERATELY, AND THIS IS THE STRONGER FORM OF IT.
