@@ -61,6 +61,9 @@
     "electron",
     "src/airi/**/*.test.ts",
     "src/airi/**/*.test.tsx",
-    "src/airi/**/*.spec.ts"
+    "src/airi/**/*.spec.ts",
+    // The Cloudflare edge Worker (wrangler bundles it separately with esbuild). It targets the
+    // Workers runtime, not the DOM, so it must not be type-checked against this app's tsconfig.
+    "cf-worker"
   ]
 }

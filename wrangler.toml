@@ -2,9 +2,13 @@
 #
 # This REPLACES the old static text landing (infra/deploy/kamiko-site). It serves the real
 # front end (apps/vtuber-amica) as a Next.js static export: the 3D VRM character stage and the
-# /game clicker both render and play CLIENT-SIDE with no keys. The AI chat degrades to an honest
-# in-character "opens at launch" line (NEXT_PUBLIC_CHATBOT_BACKEND=preflight) and on-chain tips
-# stay off until the Solana/game-api bridge is configured — nothing is a dead screen.
+# /game clicker both render and play CLIENT-SIDE with no keys. The AI chat (preflight backend,
+# NEXT_PUBLIC_CHATBOT_BACKEND=preflight) POSTs to same-origin /api/chat, which the edge Worker below
+# (main = cf-worker/index.ts) now answers: set ANTHROPIC_API_KEY (or NPC_BRIDGE_ORIGIN) as a secret
+# and she TALKS in character, reacting to the live NVDAX tape. With no secret set /api/chat returns
+# 503 and the chat degrades to the honest in-character "opens at launch" line. On-chain tips + the
+# funnel ticker/board stay off until the Solana/game-api bridge is configured — nothing is a dead
+# screen at any stage.
 #
 # Build + deploy (from apps/vtuber-amica) with ONE command:
 #   npm run deploy:site
@@ -23,6 +27,18 @@ name = "kamiko-site"
 compatibility_date = "2026-01-01"
 account_id = "c7a5b49549dcb64f2e258db485c723ca"
 
+# The edge Worker that fronts the origin. It answers same-origin POST /api/chat — the endpoint
+# amica's preflight chat backend posts every turn to — so the deployed avatar actually TALKS instead
+# of degrading to the canned "opens at launch" line. It gives her a brain one of two ways, each
+# gated on a secret you set (nothing is fabricated): ANTHROPIC_API_KEY (direct in-character chat, no
+# extra infra) or NPC_BRIDGE_ORIGIN (proxy to the full services/bridge: persona + moderation + live
+# market + memory, and the funnel routes light up too). With neither set it returns 503, which
+# preflightChat.ts already reads as "show the honest pre-launch line" — so an unconfigured deploy is
+# exactly as it is today. Every non-/api request is handed to the static assets via the ASSETS
+# binding below, so the site serves as it always did. wrangler bundles this with esbuild on deploy —
+# no dependency install. See cf-worker/index.ts for the owner steps.
+main = "./cf-worker/index.ts"
+
 # kamiko.fun is already an active zone in this account, so the custom domain + DNS are managed by
 # this deploy. (Declared before [assets] so TOML does not nest these keys under that table.)
 routes = [
@@ -32,6 +48,10 @@ routes = [
 
 [assets]
 directory = "./out"
+# The Worker (main, above) delegates every non-/api request to the static site through this binding
+# (env.ASSETS.fetch), so all pages/assets serve exactly as before — html_handling and
+# not_found_handling still apply to those reads.
+binding = "ASSETS"
 # Static export uses trailingSlash: true, so /game -> /game/index.html.
 html_handling = "auto-trailing-slash"
 not_found_handling = "404-page"
