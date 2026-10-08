@@ -82,7 +82,7 @@ import { handleChatLogs } from "@/features/externalAPI/externalAPI";
 import { VerticalSwitchBox } from "@/components/switchBox";
 import { ThoughtText } from "@/components/thoughtText";
 
-const PAGE_TITLE = "$KAMIKO — Live AI VTuber and Tap-to-Wake Game";
+const PAGE_TITLE = "Kamiko ($KAMIKO) — Live AI VTuber and Tap-to-Wake Game";
 const PAGE_DESCRIPTION =
   "Meet Kamiko, a live 3D AI VTuber who reacts to chat and market signals. Play the tap-to-wake game, view holder perks, and verify the project.";
 

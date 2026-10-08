@@ -1,0 +1,22 @@
+# kamiko.fun static deploy with a canonical-host edge (www/http -> https apex 301).
+# Matches the live assets-only config (html_handling, 404-page, _headers) plus
+# worker-first so the redirect also covers static paths.
+# Deploy: npm run build:site (from apps/vtuber-amica), then
+#   cd seo-edge && npx wrangler deploy
+# NOTE: cf-worker/index.ts (the /api/chat brain) is a separate, not-yet-live
+# entry; when it ships, port canonicalRedirect() into it.
+name = "kamiko-site"
+main = "./worker.mjs"
+compatibility_date = "2026-01-01"
+account_id = "c7a5b49549dcb64f2e258db485c723ca"
+routes = [
+  { pattern = "kamiko.fun", custom_domain = true },
+  { pattern = "www.kamiko.fun", custom_domain = true },
+]
+
+[assets]
+directory = "../out"
+binding = "ASSETS"
+html_handling = "auto-trailing-slash"
+not_found_handling = "404-page"
+run_worker_first = true

@@ -39,16 +39,16 @@ export function SeoHead({
       {
         '@type': 'Organization',
         '@id': `${SITE_URL}/#organization`,
-        name: '$KAMIKO',
-        alternateName: 'Kamiko',
+        name: 'Kamiko',
+        alternateName: '$KAMIKO',
         url: `${SITE_URL}/`,
         logo: SOCIAL_IMAGE,
       },
       {
         '@type': 'WebSite',
         '@id': `${SITE_URL}/#website`,
-        name: '$KAMIKO',
-        alternateName: 'Kamiko',
+        name: 'Kamiko',
+        alternateName: '$KAMIKO',
         url: `${SITE_URL}/`,
         description,
         publisher: { '@id': `${SITE_URL}/#organization` },
@@ -100,7 +100,7 @@ export function SeoHead({
       <meta property="og:image:alt" content={SOCIAL_IMAGE_ALT} />
       <meta property="og:url" content={canonical} />
       <meta property="og:type" content="website" />
-      <meta property="og:site_name" content="$KAMIKO" />
+      <meta property="og:site_name" content="Kamiko" />
       <meta name="twitter:card" content="summary_large_image" />
       {TWITTER_HANDLE ? (
         <>
