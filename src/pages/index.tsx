@@ -55,6 +55,7 @@ import { BackdropPicker } from "@/components/backdropPicker";
 import { AlertContext } from "@/features/alert/alertContext";
 import { EMOTES, type Emote } from "@/features/emote/emotes";
 import { marketEmoteFor, type PulseBand } from "@/features/emote/marketEmote";
+import { fetchMarketReaction } from "@/features/emote/marketReactionClient";
 import {
   activeBackdropId,
   applyBackground,
@@ -231,8 +232,20 @@ export default function Home() {
   const onMarketSnapshot = useCallback((snapshot: Parameters<typeof marketEmoteFor>[1]) => {
     const { emote, band } = marketEmoteFor(marketBand.current, snapshot);
     marketBand.current = band;
-    if (emote) playEmote(EMOTES[emote]);
-  }, [playEmote]);
+    if (!emote) return;
+    // The pose she already threw; now give the move a VOICE. The Worker picks the line (Jev when
+    // TYPESAFE_API_KEY is set, an in-code rule otherwise) and reacts to the CURRENT tape; a null
+    // reply (unconfigured deploy, no quote, or she is mid-chat) simply leaves the pose to speak for
+    // itself. speakAsHer already refuses to talk over a chat reply, so this can never interrupt one.
+    playEmote(EMOTES[emote]);
+    void fetchMarketReaction()
+      .then((line) => {
+        if (line) return speakAsHer(line);
+      })
+      .catch(() => {
+        // A market tick must never take down the stage; the pose already landed.
+      });
+  }, [playEmote, speakAsHer]);
 
   /** Write a chosen backdrop to config and repaint. One rule, one applier, one place. */
   const pickBackdrop = useCallback((backdrop: Backdrop) => {

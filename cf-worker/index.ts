@@ -37,7 +37,16 @@
  *   wrangler secret put NPC_BRIDGE_ORIGIN            # option 1 — full bridge; e.g. https://bridge.kamiko.fun
  *   # then, to light up the ticker/board through the same origin, set in package.json build:site:
  *   #   NEXT_PUBLIC_NPC_API=https://kamiko.fun
+ *
+ * SEPARATE, OPTIONAL BRAIN — GET /api/reaction (see cf-worker/marketReaction.ts): on a ±5% tape
+ * crossing the stage asks this endpoint for a SPOKEN reaction and Kamiko finally says something about
+ * the move (today the crossing only throws a mute pose). Jev PICKS the reaction from code-supplied
+ * candidates (tone + line + hype) when its secret is set; without it a deterministic in-code rule
+ * picks, so the endpoint always returns a real, in-character line — never a stub or a fabricated one.
+ *   wrangler secret put TYPESAFE_API_KEY             # optional — Jev picks her market reaction
  */
+
+import { chooseReaction } from './marketReaction';
 
 // ── Env ──────────────────────────────────────────────────────────────────────────────────────
 // Minimal hand-rolled types so this file needs no @cloudflare/workers-types dependency (disk is
@@ -56,6 +65,12 @@ interface Env {
   NPC_MODEL?: string;
   /** Reply length cap (default 300, matching the bridge's NPC_MAX_TOKENS default). */
   NPC_MAX_TOKENS?: string;
+  /** TypeSafe/Jev secret → GET /api/reaction lets Jev PICK her live-market reaction (else a rule). */
+  TYPESAFE_API_KEY?: string;
+  /** Override the TypeSafe base URL (default https://api.typesafe.ai/v1). */
+  TYPESAFE_BASE_URL?: string;
+  /** Override the TypeSafe model (default jev-latest). */
+  TYPESAFE_MODEL?: string;
 }
 
 // ── The $KAMIKO persona ────────────────────────────────────────────────────────────────────────
@@ -135,31 +150,51 @@ interface DexPair {
   quoteToken?: { symbol?: string };
 }
 
-async function liveMarketContext(): Promise<string> {
+/** The live NVDAX tape as structured numbers, or null when there is no honest quote. */
+interface NvdaxSignal {
+  readonly priceUsd: number;
+  readonly change24h: number | null;
+  readonly priceStr: string;
+  readonly chgStr: string;
+}
+
+/**
+ * Fetch the best-liquidity NVDAX quote off DexScreener (keyless, best-effort). Shared by the chat
+ * system-context string and the /api/reaction endpoint so both read the SAME tape. Any failure or
+ * missing/!finite price returns null — never a fabricated number.
+ */
+async function fetchNvdaxSignal(): Promise<NvdaxSignal | null> {
   try {
     const signal =
       typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
         ? AbortSignal.timeout(3500)
         : undefined;
     const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${NVDAX_MINT}`, { signal });
-    if (!res.ok) return '';
+    if (!res.ok) return null;
     const body = (await res.json()) as { pairs?: DexPair[] };
     const pairs = Array.isArray(body?.pairs) ? body.pairs : [];
     const priced = pairs.filter((p) => p?.priceUsd && Number.isFinite(Number(p.priceUsd)));
-    if (!priced.length) return '';
+    if (!priced.length) return null;
     priced.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
     const best = priced.find((p) => ['USDC', 'USDT'].includes(p.quoteToken?.symbol ?? '')) ?? priced[0];
     const price = Number(best.priceUsd);
+    if (!Number.isFinite(price)) return null;
     const chg = typeof best.priceChange?.h24 === 'number' && Number.isFinite(best.priceChange.h24) ? best.priceChange.h24 : null;
     const priceStr = '$' + price.toLocaleString(undefined, { maximumFractionDigits: price < 1 ? 6 : 2 });
     const chgStr = chg === null ? '' : ` (${chg >= 0 ? '+' : ''}${chg.toFixed(2)}% 24h)`;
-    return (
-      `LIVE MARKET (react to this in-character; do NOT give financial advice or price predictions): ` +
-      `NVDAX ${priceStr}${chgStr}. NVDAX is the tokenized NVIDIA tracker you are paired against.`
-    );
+    return { priceUsd: price, change24h: chg, priceStr, chgStr };
   } catch {
-    return '';
+    return null;
   }
+}
+
+async function liveMarketContext(): Promise<string> {
+  const s = await fetchNvdaxSignal();
+  if (!s) return '';
+  return (
+    `LIVE MARKET (react to this in-character; do NOT give financial advice or price predictions): ` +
+    `NVDAX ${s.priceStr}${s.chgStr}. NVDAX is the tokenized NVIDIA tracker you are paired against.`
+  );
 }
 
 // ── Request-body validation ─────────────────────────────────────────────────────────────────────
@@ -296,6 +331,37 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   });
 }
 
+// ── Live-market reaction (Jev-picked) ─────────────────────────────────────────────────────────────
+// GET /api/reaction — Kamiko's spoken reaction to the CURRENT NVDAX tape. The stage calls this on a
+// ±5% band crossing (the same moment features/emote/marketEmote.ts throws a stonks/rekt pose but
+// stays mute) and speaks the returned `reply`, so she finally says something about the move.
+//
+// The reaction is chosen by Jev when TYPESAFE_API_KEY is set — it PICKS a tone, a code-written line,
+// and a hype level from candidates this repo supplies (it never invents words) — and by a
+// deterministic in-code rule when the key is unset or Jev is unreachable. Either way the body is a
+// real, in-character reaction: `{ reply, line, tone, emotion, emote, hype, band, source, market }`.
+// When there is no honest quote it returns 503 so the caller simply stays silent (never a fake tape).
+async function handleReaction(request: Request, env: Env): Promise<Response> {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return json({ error: 'method_not_allowed' }, 405);
+  }
+  const signal = await fetchNvdaxSignal();
+  if (!signal) {
+    return new Response(JSON.stringify({ error: 'market_unavailable' }), {
+      status: 503,
+      headers: { ...JSON_HEADERS, 'Retry-After': '60' },
+    });
+  }
+  const reaction = await chooseReaction(
+    { priceUsd: signal.priceUsd, change24h: signal.change24h },
+    env,
+  );
+  return json({
+    ...reaction,
+    market: { priceUsd: signal.priceUsd, change24h: signal.change24h },
+  });
+}
+
 // ── Funnel proxy ────────────────────────────────────────────────────────────────────────────────
 // When a bridge is configured, forward the funnel's own routes to it so MarketHud, the leaderboard,
 // quests, tips and trust light up SAME-ORIGIN (set NEXT_PUBLIC_NPC_API=https://kamiko.fun to point
@@ -332,6 +398,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/chat') return handleChat(request, env);
+    if (url.pathname === '/api/reaction') return handleReaction(request, env);
 
     // Funnel routes only proxy when a bridge is actually configured; otherwise they are not ours.
     if (env.NPC_BRIDGE_ORIGIN && env.NPC_BRIDGE_ORIGIN.trim() && isFunnelPath(url.pathname)) {
