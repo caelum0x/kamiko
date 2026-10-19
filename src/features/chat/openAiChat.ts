@@ -19,7 +19,7 @@ async function getResponseStream(
     "Content-Type": "application/json",
     "Authorization": `Bearer ${apiKey}`,
     "HTTP-Referer": "https://kamiko.fun",
-    "X-Title": "Amica",
+    "X-Title": "Kamiko",
   };
 
   const res = await fetch(`${url}/v1/chat/completions`, {

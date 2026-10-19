@@ -21,7 +21,7 @@ export async function getOpenRouterChatResponseStream(messages: Message[]): Prom
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': appUrl,
-      'X-Title': 'Amica Chat'
+      'X-Title': 'Kamiko'
     },
     body: JSON.stringify({
       model,

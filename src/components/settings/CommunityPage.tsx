@@ -9,36 +9,9 @@ export function CommunityPage() {
   return (
     <BasicPage
       title={t("Community")}
-      description={t("community_desc", "Join the Amica community to connect with others exploring this technology.")}
+      description={t("community_desc", "Kamiko is built on the open-source Amica project (MIT license). This page used to link Amica's upstream Arbius community channels by default, which is not where $KAMIKO holders should go — removed to avoid sending you to the wrong project's Telegram/Twitter/Discord.")}
     >
       <ul role="list" className="divide-y divide-gray-100 max-w-xs">
-        <li className="py-4">
-          <a
-            href="https://t.me/arbius_ai"
-            target="_blank"
-            className="rounded bg-indigo-600 px-2 py-1 text-lg font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-            >
-            {t("Telegram")}
-          </a>
-        </li>
-        <li className="py-4">
-          <a
-            href="https://twitter.com/arbius_ai"
-            target="_blank"
-            className="rounded bg-indigo-600 px-2 py-1 text-lg font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-            >
-            {t("Twitter")}
-          </a>
-        </li>
-        <li className="py-4">
-          <a
-            href="https://discord.gg/SVtjU4d9jB"
-            target="_blank"
-            className="rounded bg-indigo-600 px-2 py-1 text-lg font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-            >
-            {t("Discord")}
-          </a>
-        </li>
         <li className="py-4">
           <GitHubLink />
         </li>

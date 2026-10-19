@@ -136,6 +136,17 @@ export function AboutProse() {
           ))}
         </dl>
       </section>
+
+      <section className="mt-4 border-t border-white/15 pt-3" aria-labelledby="kamiko-more-heading">
+        <SectionHeading id="kamiko-more-heading">read more</SectionHeading>
+        <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+          <li><a href="/about" className="text-emerald-300 hover:text-emerald-200">about</a></li>
+          <li><a href="/how-it-works" className="text-emerald-300 hover:text-emerald-200">how it works</a></li>
+          <li><a href="/token" className="text-emerald-300 hover:text-emerald-200">$KAMIKO token</a></li>
+          <li><a href="/faq" className="text-emerald-300 hover:text-emerald-200">faq</a></li>
+          <li><a href="/changelog" className="text-emerald-300 hover:text-emerald-200">changelog</a></li>
+        </ul>
+      </section>
     </>
   );
 }
